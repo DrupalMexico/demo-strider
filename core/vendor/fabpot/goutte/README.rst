@@ -13,7 +13,7 @@ Goutte depends on PHP 5.4+ and Guzzle 4+.
 
 .. tip::
 
-    If you need support for PHP 5.3 or Guzzle 3, use Goutte 1.0.6.
+    If you need support for PHP 5.3 or Guzzle 3, use Goutte 1.x.
 
 Installation
 ------------
@@ -22,7 +22,7 @@ Add ``fabpot/goutte`` as a require dependency in your ``composer.json`` file:
 
 .. code-block:: bash
 
-    php composer.phar require fabpot/goutte:~2.0
+    composer require fabpot/goutte
 
 .. tip::
 
@@ -31,6 +31,9 @@ Add ``fabpot/goutte`` as a require dependency in your ``composer.json`` file:
     .. code-block:: php
 
         require_once '/path/to/goutte.phar';
+
+    The phars for Goutte 1.x are also available for `download
+    <http://get.sensiolabs.org/goutte-v1.0.7.phar>`.
 
 Usage
 -----
@@ -73,7 +76,7 @@ Extract data:
 .. code-block:: php
 
     // Get the latest post in this category and display the titles
-    $crawler->filter('h2.post > a')->each(function ($node) {
+    $crawler->filter('h2 > a')->each(function ($node) {
         print $node->text()."\n";
     });
 
@@ -92,8 +95,9 @@ Submit forms:
 More Information
 ----------------
 
-Read the documentation of the BrowserKit and DomCrawler Symfony Components for
-more information about what you can do with Goutte.
+Read the documentation of the BrowserKit and `DomCrawler
+<http://symfony.com/doc/any/components/dom_crawler.html>`_ Symfony Components
+for more information about what you can do with Goutte.
 
 Technical Information
 ---------------------
