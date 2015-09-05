@@ -36,7 +36,6 @@ class LinkNotExistingInternalConstraintValidatorTest extends UnitTestCase {
         ->method('addViolation');
     }
 
-
     $constraint = new LinkNotExistingInternalConstraint();
 
     $validator = new LinkNotExistingInternalConstraintValidator();
@@ -45,12 +44,12 @@ class LinkNotExistingInternalConstraintValidatorTest extends UnitTestCase {
   }
 
   /**
-   * Data provider for ::testValidate
+   * Data provider for ::testValidate.
    */
   public function providerValidate() {
     $data = [];
 
-    // External URL
+    // External URL.
     $data[] = [Url::fromUri('https://www.drupal.org'), TRUE];
 
     // Existing routed URL.

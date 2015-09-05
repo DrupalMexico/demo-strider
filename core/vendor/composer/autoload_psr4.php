@@ -6,9 +6,9 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
-    'Zend\\Stdlib\\' => array($vendorDir . '/zendframework/zend-stdlib'),
-    'Zend\\Feed\\' => array($vendorDir . '/zendframework/zend-feed'),
-    'Zend\\Escaper\\' => array($vendorDir . '/zendframework/zend-escaper'),
+    'Zend\\Stdlib\\' => array($vendorDir . '/zendframework/zend-stdlib/src'),
+    'Zend\\Feed\\' => array($vendorDir . '/zendframework/zend-feed/src'),
+    'Zend\\Escaper\\' => array($vendorDir . '/zendframework/zend-escaper/src'),
     'Symfony\\Component\\Yaml\\' => array($vendorDir . '/symfony/yaml'),
     'Symfony\\Component\\Validator\\' => array($vendorDir . '/symfony/validator'),
     'Symfony\\Component\\Translation\\' => array($vendorDir . '/symfony/translation'),
@@ -35,5 +35,6 @@ return array(
     'Drupal\\Driver\\' => array($baseDir . '/../drivers/lib/Drupal/Driver'),
     'Drupal\\Core\\' => array($baseDir . '/lib/Drupal/Core'),
     'Drupal\\Component\\' => array($baseDir . '/lib/Drupal/Component'),
+    'Doctrine\\Instantiator\\' => array($vendorDir . '/doctrine/instantiator/src/Doctrine/Instantiator'),
     'Behat\\Mink\\' => array($vendorDir . '/behat/mink/src'),
 );

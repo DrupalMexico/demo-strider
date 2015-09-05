@@ -16,6 +16,7 @@ use Drupal\Tests\UnitTestCase;
  * Tests the LinkAccessConstraintValidator validator.
  *
  * @coversDefaultClass \Drupal\link\Plugin\Validation\Constraint\LinkAccessConstraintValidator
+ *
  * @group validation
  */
 class LinkAccessConstraintValidatorTest extends UnitTestCase {
@@ -32,6 +33,7 @@ class LinkAccessConstraintValidatorTest extends UnitTestCase {
    *   A boolean indicating if the combination is expected to be valid.
    *
    * @covers ::validate
+   *
    * @dataProvider providerValidate
    */
   public function testValidate($value, $user, $valid) {
