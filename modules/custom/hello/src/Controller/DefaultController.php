@@ -25,7 +25,7 @@ class DefaultController extends ControllerBase {
     return [
         '#type' => 'markup',
         '#markup' => $this->t('Hello @name!', ['@name' => $name])
-   ]
+   ];
   }
 
 }
