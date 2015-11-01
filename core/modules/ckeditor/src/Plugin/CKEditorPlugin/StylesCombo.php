@@ -9,7 +9,6 @@ namespace Drupal\ckeditor\Plugin\CKEditorPlugin;
 
 use Drupal\ckeditor\CKEditorPluginBase;
 use Drupal\ckeditor\CKEditorPluginConfigurableInterface;
-use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\editor\Entity\Editor;
 
@@ -59,7 +58,13 @@ class StylesCombo extends CKEditorPluginBase implements CKEditorPluginConfigurab
     return array(
       'Styles' => array(
         'label' => t('Font style'),
-        'image_alternative' => '<a href="#" role="button" aria-label="' . t('Styles') . '"><span class="ckeditor-button-dropdown">' . t('Styles') . '<span class="ckeditor-button-arrow"></span></span></a>',
+        'image_alternative' => [
+          '#type' => 'inline_template',
+          '#template' => '<a href="#" role="button" aria-label="{{ styles_text }}"><span class="ckeditor-button-dropdown">{{ styles_text }}<span class="ckeditor-button-arrow"></span></span></a>',
+          '#context' => [
+            'styles_text' => t('Styles'),
+          ],
+        ],
       ),
     );
   }

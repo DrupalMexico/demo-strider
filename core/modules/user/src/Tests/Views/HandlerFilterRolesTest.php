@@ -8,9 +8,7 @@
 namespace Drupal\user\Tests\Views;
 
 use Drupal\user\Entity\Role;
-use Drupal\user\Tests\Views\UserUnitTestBase;
 use Drupal\views\Entity\View;
-use Drupal\views\Views;
 
 /**
  * Tests the roles filter handler.
@@ -19,7 +17,7 @@ use Drupal\views\Views;
  *
  * @see \Drupal\user\Plugin\views\filter\Roles
  */
-class HandlerFilterRolesTest extends UserUnitTestBase {
+class HandlerFilterRolesTest extends UserKernelTestBase {
 
   /**
    * Views used by this test.

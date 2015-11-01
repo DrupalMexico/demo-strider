@@ -11,6 +11,7 @@ use Drupal\Core\Database\Query\SelectInterface;
 use Drupal\Core\Entity\Query\ConditionAggregateBase;
 use Drupal\Core\Entity\Query\ConditionAggregateInterface;
 use Drupal\Core\Database\Query\Condition as SqlCondition;
+use Drupal\Core\Entity\Query\QueryBase;
 
 /**
  * Defines the aggregate condition for sql based storage.
@@ -29,7 +30,7 @@ class ConditionAggregate extends ConditionAggregateBase {
     $sql_query = ($conditionContainer instanceof SelectInterface) ? $conditionContainer : $conditionContainer->sqlQuery;
     $tables = new Tables($sql_query);
     foreach ($this->conditions as $condition) {
-      if ($condition['field'] instanceOf ConditionAggregateInterface) {
+      if ($condition['field'] instanceof ConditionAggregateInterface) {
         $sql_condition = new SqlCondition($condition['field']->getConjunction());
         // Add the SQL query to the object before calling this method again.
         $sql_condition->sqlQuery = $sql_query;
@@ -39,7 +40,8 @@ class ConditionAggregate extends ConditionAggregateBase {
       else {
         $type = ((strtoupper($this->conjunction) == 'OR') || ($condition['operator'] == 'IS NULL')) ? 'LEFT' : 'INNER';
         $field = $tables->addField($condition['field'], $type, $condition['langcode']);
-        Condition::translateCondition($condition, $sql_query, $tables->isFieldCaseSensitive($condition['field']));
+        $condition_class = QueryBase::getClass($this->namespaces, 'Condition');
+        $condition_class::translateCondition($condition, $sql_query, $tables->isFieldCaseSensitive($condition['field']));
         $function = $condition['function'];
         $placeholder = ':db_placeholder_' . $conditionContainer->nextPlaceholder();
         $conditionContainer->having("$function($field) {$condition['operator']} $placeholder", array($placeholder => $condition['value']));

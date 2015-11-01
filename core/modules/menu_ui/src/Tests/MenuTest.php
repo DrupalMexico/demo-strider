@@ -10,7 +10,6 @@ namespace Drupal\menu_ui\Tests;
 use Drupal\block\Entity\Block;
 use Drupal\Component\Serialization\Json;
 use Drupal\Component\Utility\Unicode;
-use Drupal\Core\Cache\Cache;
 use Drupal\Core\Menu\MenuLinkInterface;
 use Drupal\Core\Url;
 use Drupal\menu_link_content\Entity\MenuLinkContent;
@@ -69,6 +68,8 @@ class MenuTest extends MenuWebTestBase {
 
   protected function setUp() {
     parent::setUp();
+
+    $this->drupalPlaceBlock('page_title_block');
 
     $this->drupalCreateContentType(array('type' => 'article', 'name' => 'Article'));
 
@@ -195,8 +196,8 @@ class MenuTest extends MenuWebTestBase {
 
     // Verify that using a menu_name that is too long results in a validation
     // message.
-    $this->assertRaw(t('!name cannot be longer than %max characters but is currently %length characters long.', array(
-      '!name' => t('Menu name'),
+    $this->assertRaw(t('@name cannot be longer than %max characters but is currently %length characters long.', array(
+      '@name' => t('Menu name'),
       '%max' => MENU_MAX_MENU_NAME_LENGTH_UI,
       '%length' => Unicode::strlen($menu_name),
     )));
@@ -207,8 +208,8 @@ class MenuTest extends MenuWebTestBase {
     $this->drupalPostForm('admin/structure/menu/add', $edit, t('Save'));
 
     // Verify that no validation error is given for menu_name length.
-    $this->assertNoRaw(t('!name cannot be longer than %max characters but is currently %length characters long.', array(
-      '!name' => t('Menu name'),
+    $this->assertNoRaw(t('@name cannot be longer than %max characters but is currently %length characters long.', array(
+      '@name' => t('Menu name'),
       '%max' => MENU_MAX_MENU_NAME_LENGTH_UI,
       '%length' => Unicode::strlen($menu_name),
     )));
@@ -219,6 +220,7 @@ class MenuTest extends MenuWebTestBase {
 
     // Confirm that the custom menu block is available.
     $this->drupalGet('admin/structure/block/list/' . $this->config('system.theme')->get('default'));
+    $this->clickLinkPartialName('Place block');
     $this->assertText($label);
 
     // Enable the block.
@@ -242,9 +244,10 @@ class MenuTest extends MenuWebTestBase {
     $this->assertResponse(200);
     $this->assertRaw(t('The menu %title has been deleted.', array('%title' => $label)), 'Custom menu was deleted');
     $this->assertNull(Menu::load($menu_name), 'Custom menu was deleted');
-    // Test if all menu links associated to the menu were removed from database.
+    // Test if all menu links associated with the menu were removed from
+    // database.
     $result = entity_load_multiple_by_properties('menu_link_content', array('menu_name' => $menu_name));
-    $this->assertFalse($result, 'All menu links associated to the custom menu were deleted.');
+    $this->assertFalse($result, 'All menu links associated with the custom menu were deleted.');
 
     // Make sure there's no delete button on system menus.
     $this->drupalGet('admin/structure/menu/manage/main');
@@ -532,6 +535,7 @@ class MenuTest extends MenuWebTestBase {
     // Make sure menu shows up with new name in block addition.
     $default_theme = $this->config('system.theme')->get('default');
     $this->drupalget('admin/structure/block/list/' . $default_theme);
+    $this->clickLinkPartialName('Place block');
     $this->assertText($edit['label']);
   }
 
@@ -888,8 +892,7 @@ class MenuTest extends MenuWebTestBase {
     // the front page.
     /** @var \Drupal\Core\Menu\MenuLinkManagerInterface $menu_link_manager */
     $menu_link_manager = \Drupal::service('plugin.manager.menu.link');
-    $result = $menu_link_manager->loadLinksByRoute('user.logout');
-    $instance = reset($result);
+    $instance = $menu_link_manager->getInstance(['id' => 'user.logout']);
 
     $this->assertTrue((bool) $instance, 'Standard menu link was loaded');
     return $instance;

@@ -50,6 +50,7 @@ class CommentNonNodeTest extends WebTestBase {
   protected function setUp() {
     parent::setUp();
     $this->drupalPlaceBlock('system_breadcrumb_block');
+    $this->drupalPlaceBlock('page_title_block');
 
     // Create a bundle for entity_test.
     entity_test_create_bundle('entity_test', 'Entity Test', 'entity_test');
@@ -180,7 +181,7 @@ class CommentNonNodeTest extends WebTestBase {
    * @param bool $reply
    *   Boolean indicating whether the comment is a reply to another comment.
    *
-   * @return boolean
+   * @return bool
    *   Boolean indicating whether the comment was found.
    */
   function commentExists(CommentInterface $comment = NULL, $reply = FALSE) {
@@ -201,7 +202,7 @@ class CommentNonNodeTest extends WebTestBase {
   /**
    * Checks whether the commenter's contact information is displayed.
    *
-   * @return boolean
+   * @return bool
    *   Contact info is available.
    */
   function commentContactInfoAvailable() {
@@ -434,7 +435,7 @@ class CommentNonNodeTest extends WebTestBase {
     $data = array('bundle' => 'entity_test', 'name' => $random_label);
     $new_entity = entity_create('entity_test', $data);
     $new_entity->save();
-    $this->drupalGet('entity_test/manage/' . $new_entity->id());
+    $this->drupalGet('entity_test/manage/' . $new_entity->id() . '/edit');
     $this->assertNoFieldChecked('edit-field-foobar-0-status-1');
     $this->assertFieldChecked('edit-field-foobar-0-status-2');
     $this->assertNoField('edit-field-foobar-0-status-0');

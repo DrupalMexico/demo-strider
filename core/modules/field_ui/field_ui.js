@@ -5,24 +5,28 @@
 
 (function ($, Drupal, drupalSettings) {
 
-  "use strict";
+  'use strict';
 
   /**
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Adds behaviors to the field storage add form.
    */
   Drupal.behaviors.fieldUIFieldStorageAddForm = {
     attach: function (context) {
       var $form = $(context).find('[data-drupal-selector="field-ui-field-storage-add-form"]').once('field_ui_add');
       if ($form.length) {
-        // Add a few 'form-required' css classes here. We can not use the Form
-        // API '#required' property because both label elements for "add new"
-        // and "re-use existing" can never be filled and submitted at the same
-        // time. The actual validation will happen server-side.
+        // Add a few 'js-form-required' and 'form-required' css classes here.
+        // We can not use the Form API '#required' property because both label
+        // elements for "add new" and "re-use existing" can never be filled and
+        // submitted at the same time. The actual validation will happen
+        // server-side.
         $form.find(
-          '.form-item-label label,' +
-          '.form-item-field-name label,' +
-          '.form-item-existing-storage-label label')
-          .addClass('form-required');
+          '.js-form-item-label label,' +
+          '.js-form-item-field-name label,' +
+          '.js-form-item-existing-storage-label label')
+          .addClass('js-form-required form-required');
 
         var $newFieldType = $form.find('select[name="new_storage_type"]');
         var $existingStorageName = $form.find('select[name="existing_storage_name"]');
@@ -56,8 +60,14 @@
   };
 
   /**
+   * Attaches the fieldUIOverview behavior.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches the fieldUIOverview behavior.
+   *
+   * @see Drupal.fieldUIOverview.attach
    */
   Drupal.behaviors.fieldUIDisplayOverview = {
     attach: function (context, settings) {
@@ -68,6 +78,8 @@
   };
 
   /**
+   * Namespace for the field UI overview.
+   *
    * @namespace
    */
   Drupal.fieldUIOverview = {
@@ -76,8 +88,11 @@
      * Attaches the fieldUIOverview behavior.
      *
      * @param {HTMLTableElement} table
+     *   The table element for the overview.
      * @param {object} rowsData
+     *   The data of the rows in the table.
      * @param {object} rowHandlers
+     *   Handlers to be added to the rows.
      */
     attach: function (table, rowsData, rowHandlers) {
       var tableDrag = Drupal.tableDrag[table.id];
@@ -243,6 +258,7 @@
    *   Additional data to be populated in the constructed object.
    *
    * @return {Drupal.fieldUIDisplayOverview.field}
+   *   The field row handler constructed.
    */
   Drupal.fieldUIDisplayOverview.field = function (row, data) {
     this.row = row;
@@ -263,6 +279,7 @@
      * Returns the region corresponding to the current form values of the row.
      *
      * @return {string}
+     *   Either 'hidden' or 'content'.
      */
     getRegion: function () {
       return (this.$pluginSelect.val() === 'hidden') ? 'hidden' : 'content';

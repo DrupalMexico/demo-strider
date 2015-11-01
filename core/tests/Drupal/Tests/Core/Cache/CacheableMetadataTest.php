@@ -35,11 +35,36 @@ class CacheableMetadataTest extends UnitTestCase {
     $cache_contexts_manager = $this->getMockBuilder('Drupal\Core\Cache\Context\CacheContextsManager')
       ->disableOriginalConstructor()
       ->getMock();
+    $cache_contexts_manager->method('assertValidTokens')->willReturn(TRUE);
+
     $container = new ContainerBuilder();
     $container->set('cache_contexts_manager', $cache_contexts_manager);
     \Drupal::setContainer($container);
 
     $this->assertEquals($expected, $a->merge($b));
+  }
+
+  /**
+   * @covers ::addCacheableDependency
+   * @dataProvider providerTestMerge
+   *
+   * This only tests at a high level, because it reuses existing logic. Detailed
+   * tests exist for the existing logic:
+   *
+   * @see \Drupal\Tests\Core\Cache\CacheTest::testMergeTags()
+   * @see \Drupal\Tests\Core\Cache\CacheTest::testMergeMaxAges()
+   * @see \Drupal\Tests\Core\Cache\CacheContextsTest
+   */
+  public function testAddCacheableDependency(CacheableMetadata $a, CacheableMetadata $b, CacheableMetadata $expected) {
+    $cache_contexts_manager = $this->getMockBuilder('Drupal\Core\Cache\Context\CacheContextsManager')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $cache_contexts_manager->method('assertValidTokens')->willReturn(TRUE);
+    $container = new ContainerBuilder();
+    $container->set('cache_contexts_manager', $cache_contexts_manager);
+    \Drupal::setContainer($container);
+
+    $this->assertEquals($expected, $a->addCacheableDependency($b));
   }
 
   /**

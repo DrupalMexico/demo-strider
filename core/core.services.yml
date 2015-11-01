@@ -1,12 +1,38 @@
 parameters:
-  session.storage.options: {}
-  twig.config: {}
+  session.storage.options:
+    gc_probability: 1
+    gc_divisor: 100
+    gc_maxlifetime: 200000
+    cookie_lifetime: 2000000
+  twig.config:
+    debug: false
+    auto_reload: null
+    cache: true
   renderer.config:
-    required_cache_contexts: ['languages:language_interface', 'theme']
+    required_cache_contexts: ['languages:language_interface', 'theme', 'user.permissions']
+    auto_placeholder_conditions:
+      max-age: 0
+      contexts: ['session', 'user']
+      tags: []
   factory.keyvalue:
     default: keyvalue.database
+  http.response.debug_cacheability_headers: false
   factory.keyvalue.expirable:
     default: keyvalue.expirable.database
+  filter_protocols:
+    - http
+    - https
+    - ftp
+    - news
+    - nntp
+    - tel
+    - telnet
+    - mailto
+    - irc
+    - ssh
+    - sftp
+    - webcal
+    - rtsp
 services:
   # Simple cache contexts, directly derived from the request context.
   cache_context.ip:
@@ -24,6 +50,11 @@ services:
     arguments: ['@request_stack']
     tags:
       - { name: cache.context }
+  cache_context.session:
+    class: Drupal\Core\Cache\Context\SessionCacheContext
+    arguments: ['@request_stack']
+    tags:
+      - { name: cache.context}
   cache_context.request_format:
     class: Drupal\Core\Cache\Context\RequestFormatCacheContext
     arguments: ['@request_stack']
@@ -36,6 +67,11 @@ services:
       - { name: cache.context }
   cache_context.url.site:
     class: Drupal\Core\Cache\Context\SiteCacheContext
+    arguments: ['@request_stack']
+    tags:
+      - { name: cache.context }
+  cache_context.url.path:
+    class: Drupal\Core\Cache\Context\PathCacheContext
     arguments: ['@request_stack']
     tags:
       - { name: cache.context }
@@ -140,6 +176,15 @@ services:
   cache.backend.php:
     class: Drupal\Core\Cache\PhpBackendFactory
     arguments: ['@cache_tags.invalidator.checksum']
+  cache.backend.memory:
+    class: Drupal\Core\Cache\MemoryBackendFactory
+  # A special cache bin that does not persist beyond the length of the request.
+  cache.static:
+    class: Drupal\Core\Cache\CacheBackendInterface
+    tags:
+      - { name: cache.bin, default_backend: cache.backend.memory }
+    factory: cache_factory:get
+    arguments: [static]
   cache.bootstrap:
     class: Drupal\Core\Cache\CacheBackendInterface
     tags:
@@ -206,17 +251,20 @@ services:
     class: Drupal\Core\PageCache\ResponsePolicy\KillSwitch
     tags:
       - { name: page_cache_response_policy }
+      - { name: dynamic_page_cache_response_policy }
   page_cache_no_cache_routes:
     class: Drupal\Core\PageCache\ResponsePolicy\DenyNoCacheRoutes
     arguments: ['@current_route_match']
     public: false
     tags:
       - { name: page_cache_response_policy }
+      - { name: dynamic_page_cache_response_policy }
   page_cache_no_server_error:
     class: Drupal\Core\PageCache\ResponsePolicy\NoServerError
     public: false
     tags:
       - { name: page_cache_response_policy }
+      - { name: dynamic_page_cache_response_policy }
   config.manager:
     class: Drupal\Core\Config\ConfigManager
     arguments: ['@entity.manager', '@config.factory', '@config.typed', '@string_translation', '@config.storage', '@event_dispatcher']
@@ -243,13 +291,13 @@ services:
     public: false
     tags:
       - { name: backend_overridable }
-  config.storage.file:
-    class: Drupal\Core\Config\FileStorage
-    factory: Drupal\Core\Config\FileStorageFactory::getActive
-    public: false
+  # @deprecated in Drupal 8.0.x and will be removed before 9.0.0. Use
+  #   config.storage.sync instead.
   config.storage.staging:
     class: Drupal\Core\Config\FileStorage
-    factory: Drupal\Core\Config\FileStorageFactory::getStaging
+    factory: Drupal\Core\Config\FileStorageFactory::getSync
+  config.storage.sync:
+    alias: config.storage.staging
   config.storage.snapshot:
     class: Drupal\Core\Config\DatabaseStorage
     arguments: ['@database', config_snapshot]
@@ -266,6 +314,9 @@ services:
   context.handler:
     class: Drupal\Core\Plugin\Context\ContextHandler
     arguments: ['@typed_data_manager']
+  context.repository:
+    class: Drupal\Core\Plugin\Context\LazyContextRepository
+    arguments: ['@service_container']
   cron:
     class: Drupal\Core\Cron
     arguments: ['@module_handler', '@lock', '@queue', '@state', '@account_switcher', '@logger.channel.cron', '@plugin.manager.queue_worker']
@@ -291,7 +342,6 @@ services:
     arguments: ['@request_stack', '@url_generator']
   form_error_handler:
     class: Drupal\Core\Form\FormErrorHandler
-    arguments: ['@string_translation', '@link_generator']
   form_cache:
     class: Drupal\Core\Form\FormCache
     arguments: ['@app.root', '@keyvalue.expirable', '@module_handler', '@current_user', '@csrf_token', '@logger.channel.form', '@request_stack', '@page_cache_request_policy']
@@ -371,10 +421,21 @@ services:
   path.current:
     class: Drupal\Core\Path\CurrentPathStack
     arguments: ['@request_stack']
+  http_handler_stack:
+    class: GuzzleHttp\HandlerStack
+    public: false
+    factory: GuzzleHttp\HandlerStack::create
+    configurator: ['@http_handler_stack_configurator', configure]
+  http_handler_stack_configurator:
+    class: Drupal\Core\Http\HandlerStackConfigurator
+    public: false
+    arguments: ['@service_container']
   http_client:
-    class: Drupal\Core\Http\Client
-    tags:
-      - { name: service_collector, tag: http_client_subscriber, call: attach }
+    class: GuzzleHttp\Client
+    factory: http_client_factory:fromOptions
+  http_client_factory:
+    class: Drupal\Core\Http\ClientFactory
+    arguments: ['@http_handler_stack']
   theme.negotiator:
     class: Drupal\Core\Theme\ThemeNegotiator
     arguments: ['@access_check.theme']
@@ -559,7 +620,7 @@ services:
     public: false
   controller_resolver:
     class: Drupal\Core\Controller\ControllerResolver
-    arguments: ['@class_resolver']
+    arguments: ['@psr7.http_message_factory', '@class_resolver']
   class_resolver:
     class: Drupal\Core\DependencyInjection\ClassResolver
     calls:
@@ -572,12 +633,8 @@ services:
   http_kernel.basic:
     class: Symfony\Component\HttpKernel\HttpKernel
     arguments: ['@event_dispatcher', '@controller_resolver', '@request_stack']
-  http_negotiation.format_negotiator:
-    class: Drupal\Core\ContentNegotiation
-    private: true
   http_middleware.negotiation:
     class: Drupal\Core\StackMiddleware\NegotiationMiddleware
-    arguments: ['@http_negotiation.format_negotiator']
     tags:
       - { name: http_middleware, priority: 400 }
   http_middleware.reverse_proxy:
@@ -596,9 +653,18 @@ services:
       - { name: http_middleware, priority: 50 }
     calls:
       - [setContainer, ['@service_container']]
+  psr7.http_foundation_factory:
+    class: Symfony\Bridge\PsrHttpMessage\Factory\HttpFoundationFactory
+  psr7.http_message_factory:
+    class: Symfony\Bridge\PsrHttpMessage\Factory\DiactorosFactory
   language_manager:
     class: Drupal\Core\Language\LanguageManager
     arguments: ['@language.default']
+  language.current_language_context:
+    class: Drupal\Core\Language\ContextProvider\CurrentLanguageContext
+    arguments: ['@language_manager']
+    tags:
+      - { name: 'context_provider' }
   language.default:
     class: Drupal\Core\Language\LanguageDefault
     arguments: ['%language.default_values%']
@@ -609,9 +675,7 @@ services:
       - { name: string_translator, priority: 30 }
   string_translation:
     class: Drupal\Core\StringTranslation\TranslationManager
-    arguments: ['@language_manager', '@state']
-    calls:
-      - [initLanguageManager]
+    arguments: ['@language.default']
     tags:
       - { name: service_collector, tag: string_translator, call: addTranslator }
   database.replica:
@@ -653,13 +717,13 @@ services:
     arguments: ['@current_route_match']
   router.route_provider:
     class: Drupal\Core\Routing\RouteProvider
-    arguments: ['@database', '@state', '@path.current', '@cache.data', '@path_processor_manager']
+    arguments: ['@database', '@state', '@path.current', '@cache.data', '@path_processor_manager', '@cache_tags.invalidator']
     tags:
       - { name: event_subscriber }
       - { name: backend_overridable }
   router.route_preloader:
     class: Drupal\Core\Routing\RoutePreloader
-    arguments: ['@router.route_provider', '@state']
+    arguments: ['@router.route_provider', '@state', '@cache.bootstrap']
     tags:
       - { name: 'event_subscriber' }
   router.matcher.final_matcher:
@@ -682,9 +746,15 @@ services:
     arguments: ['@route_filter.lazy_collector']
     tags:
       - { name: event_subscriber }
-  url_generator:
+  url_generator.non_bubbling:
     class: Drupal\Core\Routing\UrlGenerator
-    arguments: ['@router.route_provider', '@path_processor_manager', '@route_processor_manager', '@config.factory', '@request_stack']
+    arguments: ['@router.route_provider', '@path_processor_manager', '@route_processor_manager', '@request_stack', '%filter_protocols%']
+    public: false
+    calls:
+      - [setContext, ['@?router.request_context']]
+  url_generator:
+    class: Drupal\Core\Render\MetadataBubblingUrlGenerator
+    arguments: ['@url_generator.non_bubbling', '@renderer']
     calls:
       - [setContext, ['@?router.request_context']]
   redirect.destination:
@@ -692,10 +762,10 @@ services:
     arguments: ['@request_stack', '@url_generator']
   unrouted_url_assembler:
     class: Drupal\Core\Utility\UnroutedUrlAssembler
-    arguments: ['@request_stack', '@config.factory', '@path_processor_manager']
+    arguments: ['@request_stack', '@path_processor_manager', '%filter_protocols%']
   link_generator:
     class: Drupal\Core\Utility\LinkGenerator
-    arguments: ['@url_generator', '@module_handler']
+    arguments: ['@url_generator', '@module_handler', '@renderer']
   router:
     class: Drupal\Core\Routing\AccessAwareRouter
     arguments: ['@router.no_access_checks', '@access_manager', '@current_user']
@@ -729,6 +799,9 @@ services:
     arguments: ['@database']
     tags:
       - { name: backend_overridable }
+  pgsql.entity.query.sql:
+    class: Drupal\Core\Entity\Query\Sql\pgsql\QueryFactory
+    arguments: ['@database']
   entity.query.null:
     class: Drupal\Core\Entity\Query\Null\QueryFactory
   entity.query.keyvalue:
@@ -856,6 +929,11 @@ services:
     class: Drupal\Core\EventSubscriber\RouteMethodSubscriber
     tags:
       - { name: event_subscriber }
+  psr_response_view_subscriber:
+    class: Drupal\Core\EventSubscriber\PsrResponseSubscriber
+    arguments: ['@psr7.http_foundation_factory']
+    tags:
+      - { name: event_subscriber }
 
   # Main content view subscriber plus the renderers it uses.
   main_content_view_subscriber:
@@ -869,7 +947,7 @@ services:
       - { name: event_subscriber }
   main_content_renderer.html:
     class: Drupal\Core\Render\MainContent\HtmlRenderer
-    arguments: ['@title_resolver', '@plugin.manager.display_variant', '@event_dispatcher', '@module_handler', '@renderer', '@render_cache']
+    arguments: ['@title_resolver', '@plugin.manager.display_variant', '@event_dispatcher', '@module_handler', '@renderer', '@render_cache', '%renderer.config%']
     tags:
       - { name: render.main_content_renderer, format: html }
   main_content_renderer.ajax:
@@ -983,7 +1061,7 @@ services:
   html_response.attachments_processor:
     class: Drupal\Core\Render\HtmlResponseAttachmentsProcessor
     tags:
-    arguments: ['@asset.resolver', '@config.factory', '@asset.css.collection_renderer', '@asset.js.collection_renderer', '@request_stack', '@renderer']
+    arguments: ['@asset.resolver', '@config.factory', '@asset.css.collection_renderer', '@asset.js.collection_renderer', '@request_stack', '@renderer', '@module_handler']
   html_response.subscriber:
     class: Drupal\Core\EventSubscriber\HtmlResponseSubscriber
     tags:
@@ -993,14 +1071,18 @@ services:
     class: Drupal\Core\EventSubscriber\FinishResponseSubscriber
     tags:
       - { name: event_subscriber }
-    arguments: ['@language_manager', '@config.factory', '@page_cache_request_policy', '@page_cache_response_policy', '@cache_contexts_manager']
+    arguments: ['@language_manager', '@config.factory', '@page_cache_request_policy', '@page_cache_response_policy', '@cache_contexts_manager', '%http.response.debug_cacheability_headers%']
   response_generator_subscriber:
     class: Drupal\Core\EventSubscriber\ResponseGeneratorSubscriber
     tags:
       - { name: event_subscriber }
   redirect_response_subscriber:
     class: Drupal\Core\EventSubscriber\RedirectResponseSubscriber
-    arguments: ['@url_generator', '@router.request_context']
+    arguments: ['@unrouted_url_assembler', '@router.request_context']
+    tags:
+      - { name: event_subscriber }
+  redirect_leading_slashes_subscriber:
+    class: Drupal\Core\EventSubscriber\RedirectLeadingSlashesSubscriber
     tags:
       - { name: event_subscriber }
   request_close_subscriber:
@@ -1031,7 +1113,7 @@ services:
     class: Drupal\Core\EventSubscriber\DefaultExceptionSubscriber
     tags:
       - { name: event_subscriber }
-    arguments: ['@config.factory', '@bare_html_page_renderer']
+    arguments: ['@config.factory']
   exception.logger:
     class: Drupal\Core\EventSubscriber\ExceptionLoggingSubscriber
     tags:
@@ -1152,7 +1234,7 @@ services:
       - { name: service_collector, tag: breadcrumb_builder, call: addBuilder }
   token:
     class: Drupal\Core\Utility\Token
-    arguments: ['@module_handler', '@cache.discovery', '@language_manager', '@cache_tags.invalidator']
+    arguments: ['@module_handler', '@cache.discovery', '@language_manager', '@cache_tags.invalidator', '@renderer']
   batch.storage:
     class: Drupal\Core\Batch\BatchStorage
     arguments: ['@database', '@session', '@csrf_token']
@@ -1179,50 +1261,71 @@ services:
     calls:
       - [setContainer, ['@service_container']]
     arguments: ['feed.writer.']
-# Zend Feed reader plugins
+# Zend Feed reader plugins. Plugins should be set as prototype scope.
   feed.reader.dublincoreentry:
     class: Zend\Feed\Reader\Extension\DublinCore\Entry
+    scope: prototype
   feed.reader.dublincorefeed:
     class: Zend\Feed\Reader\Extension\DublinCore\Feed
+    scope: prototype
   feed.reader.contententry:
     class: Zend\Feed\Reader\Extension\Content\Entry
+    scope: prototype
   feed.reader.atomentry:
     class: Zend\Feed\Reader\Extension\Atom\Entry
+    scope: prototype
   feed.reader.atomfeed:
     class: Zend\Feed\Reader\Extension\Atom\Feed
+    scope: prototype
   feed.reader.slashentry:
     class: Zend\Feed\Reader\Extension\Slash\Entry
+    scope: prototype
   feed.reader.wellformedwebentry:
     class: Zend\Feed\Reader\Extension\WellFormedWeb\Entry
+    scope: prototype
   feed.reader.threadentry:
     class: Zend\Feed\Reader\Extension\Thread\Entry
+    scope: prototype
   feed.reader.podcastentry:
     class: Zend\Feed\Reader\Extension\Podcast\Entry
+    scope: prototype
   feed.reader.podcastfeed:
     class: Zend\Feed\Reader\Extension\Podcast\Feed
-# Zend Feed writer plugins
+    scope: prototype
+# Zend Feed writer plugins. Plugins should be set as prototype scope.
   feed.writer.atomrendererfeed:
     class: Zend\Feed\Writer\Extension\Atom\Renderer\Feed
+    scope: prototype
   feed.writer.contentrendererentry:
     class: Zend\Feed\Writer\Extension\Content\Renderer\Entry
+    scope: prototype
   feed.writer.dublincorerendererentry:
     class: Zend\Feed\Writer\Extension\DublinCore\Renderer\Entry
+    scope: prototype
   feed.writer.dublincorerendererfeed:
     class: Zend\Feed\Writer\Extension\DublinCore\Renderer\Feed
+    scope: prototype
   feed.writer.itunesentry:
     class: Zend\Feed\Writer\Extension\ITunes\Entry
+    scope: prototype
   feed.writer.itunesfeed:
     class: Zend\Feed\Writer\Extension\ITunes\Feed
+    scope: prototype
   feed.writer.itunesrendererentry:
     class: Zend\Feed\Writer\Extension\ITunes\Renderer\Entry
+    scope: prototype
   feed.writer.itunesrendererfeed:
     class: Zend\Feed\Writer\Extension\ITunes\Renderer\Feed
+    scope: prototype
   feed.writer.slashrendererentry:
     class: Zend\Feed\Writer\Extension\Slash\Renderer\Entry
+    scope: prototype
   feed.writer.threadingrendererentry:
     class: Zend\Feed\Writer\Extension\Threading\Renderer\Entry
+    scope: prototype
   feed.writer.wellformedwebrendererentry:
     class: Zend\Feed\Writer\Extension\WellFormedWeb\Renderer\Entry
+    scope: prototype
   theme.manager:
     class: Drupal\Core\Theme\ThemeManager
     arguments: ['@app.root', '@theme.negotiator', '@theme.initialization', '@request_stack', '@module_handler']
@@ -1240,6 +1343,9 @@ services:
       - [setThemeManager, ['@theme.manager']]
   authentication:
     class: Drupal\Core\Authentication\AuthenticationManager
+    arguments: ['@authentication_collector']
+  authentication_collector:
+    class: Drupal\Core\Authentication\AuthenticationCollector
     tags:
       - { name: service_collector, tag: authentication_provider, call: addProvider }
   authentication_subscriber:
@@ -1252,7 +1358,7 @@ services:
     arguments: ['@current_user', '@session_handler.write_safe']
   user_permissions_hash_generator:
     class: Drupal\Core\Session\PermissionsHashGenerator
-    arguments: ['@private_key', '@cache.default']
+    arguments: ['@private_key', '@cache.default', '@cache.static']
   current_user:
     class: Drupal\Core\Session\AccountProxy
   session_configuration:
@@ -1337,7 +1443,7 @@ services:
     class: Drupal\Core\Extension\InfoParser
   twig:
     class: Drupal\Core\Template\TwigEnvironment
-    arguments: ['@app.root', '@twig.loader', '%twig.config%']
+    arguments: ['@app.root', '@cache.default', '%twig_extension_hash%', '@twig.loader', '%twig.config%']
     tags:
       - { name: service_collector, tag: 'twig.extension', call: addExtension }
   twig.extension:
@@ -1348,6 +1454,7 @@ services:
     calls:
       - [setUrlGenerator, ['@url_generator']]
       - [setThemeManager, ['@theme.manager']]
+      - [setDateFormatter, ['@date.formatter']]
   # @todo Figure out what to do about debugging functions.
   # @see https://www.drupal.org/node/1804998
   twig.extension.debug:
@@ -1377,6 +1484,7 @@ services:
     alias: plugin.manager.element_info
   file.mime_type.guesser:
     class: Drupal\Core\File\MimeType\MimeTypeGuesser
+    arguments: ['@stream_wrapper_manager']
     tags:
       - { name: service_collector, tag: mime_type_guesser, call: addGuesser }
     lazy: true
@@ -1386,14 +1494,43 @@ services:
     tags:
       - { name: mime_type_guesser }
     lazy: true
+  render_placeholder_generator:
+    class: Drupal\Core\Render\PlaceholderGenerator
+    arguments: ['%renderer.config%']
+    public: false
   render_cache:
-    class: Drupal\Core\Render\RenderCache
-    arguments: ['@request_stack', '@cache_factory', '@cache_contexts_manager']
+    class: Drupal\Core\Render\PlaceholderingRenderCache
+    arguments: ['@request_stack', '@cache_factory', '@cache_contexts_manager', '@render_placeholder_generator']
   renderer:
     class: Drupal\Core\Render\Renderer
-    arguments: ['@controller_resolver', '@theme.manager', '@plugin.manager.element_info', '@render_cache', '%renderer.config%']
+    arguments: ['@controller_resolver', '@theme.manager', '@plugin.manager.element_info', '@render_placeholder_generator', '@render_cache', '@request_stack', '%renderer.config%']
+  early_rendering_controller_wrapper_subscriber:
+    class: Drupal\Core\EventSubscriber\EarlyRenderingControllerWrapperSubscriber
+    arguments: ['@controller_resolver', '@renderer']
+    tags:
+      - { name: event_subscriber }
+  # Placeholder strategies for rendering placeholders.
+  html_response.placeholder_strategy_subscriber:
+    class: Drupal\Core\EventSubscriber\HtmlResponsePlaceholderStrategySubscriber
+    tags:
+      - { name: event_subscriber }
+    arguments: ['@placeholder_strategy']
+  placeholder_strategy:
+    class: Drupal\Core\Render\Placeholder\ChainedPlaceholderStrategy
+    tags:
+      - { name: service_collector, tag: placeholder_strategy, call: addPlaceholderStrategy }
+  placeholder_strategy.single_flush:
+    class: Drupal\Core\Render\Placeholder\SingleFlushStrategy
+    tags:
+      - { name: placeholder_strategy, priority: -1000 }
   email.validator:
     class: Egulias\EmailValidator\EmailValidator
+  update.post_update_registry:
+    class: Drupal\Core\Update\UpdateRegistry
+    factory: ['@update.post_update_registry_factory', create]
+  update.post_update_registry_factory:
+    class: Drupal\Core\Update\UpdateRegistryFactory
+    parent: container.trait
 
   response_filter.active_link:
     class: Drupal\Core\EventSubscriber\ActiveLinkResponseFilter

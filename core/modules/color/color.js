@@ -5,10 +5,15 @@
 
 (function ($) {
 
-  "use strict";
+  'use strict';
 
   /**
+   * Displays farbtastic color selector and initialize color administration UI.
+   *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attach color selection behavior to relevant context.
    */
   Drupal.behaviors.color = {
     attach: function (context, settings) {
@@ -95,10 +100,14 @@
        * @function Drupal.color~shift_color
        *
        * @param {string} given
-       * @param {Array} ref1
-       * @param {Array} ref2
+       *   A hex color code to shift.
+       * @param {Array.<number>} ref1
+       *   First HSL color reference.
+       * @param {Array.<number>} ref2
+       *   Second HSL color reference.
        *
        * @return {string}
+       *   A hex color, shifted.
        */
       function shift_color(given, ref1, ref2) {
         var d;
@@ -143,16 +152,21 @@
        * Callback for Farbtastic when a new color is chosen.
        *
        * @param {HTMLElement} input
+       *   The input element where the color is chosen.
        * @param {string} color
+       *   The color that was chosen through the input.
        * @param {bool} propagate
+       *   Whether or not to propagate the color to a locked pair value
        * @param {bool} colorScheme
+       *   Flag to indicate if the user is using a color scheme when changing
+       *   the color.
        */
       function callback(input, color, propagate, colorScheme) {
         var matched;
         // Set background/foreground colors.
         $(input).css({
           backgroundColor: color,
-          'color': farb.RGBToHSL(farb.unpack(color))[2] > 0.5 ? '#000' : '#fff'
+          color: farb.RGBToHSL(farb.unpack(color))[2] > 0.5 ? '#000' : '#fff'
         });
 
         // Change input value.
@@ -201,6 +215,7 @@
        * Focuses Farbtastic on a particular field.
        *
        * @param {jQuery.Event} e
+       *   The focus event on the field.
        */
       function focus(e) {
         var input = e.target;

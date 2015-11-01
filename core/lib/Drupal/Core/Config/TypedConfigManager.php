@@ -8,16 +8,14 @@
 namespace Drupal\Core\Config;
 
 use Drupal\Component\Utility\NestedArray;
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Cache\CacheBackendInterface;
-use Drupal\Core\Config\Schema\ArrayElement;
 use Drupal\Core\Config\Schema\ConfigSchemaAlterException;
 use Drupal\Core\Config\Schema\ConfigSchemaDiscovery;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\TypedData\TypedDataManager;
 
 /**
- * Manages config type plugins.
+ * Manages config schema type plugins.
  */
 class TypedConfigManager extends TypedDataManager implements TypedConfigManagerInterface {
 
@@ -72,13 +70,7 @@ class TypedConfigManager extends TypedDataManager implements TypedConfigManagerI
 
 
   /**
-   * Gets typed configuration data.
-   *
-   * @param string $name
-   *   Configuration object name.
-   *
-   * @return \Drupal\Core\Config\Schema\TypedConfigInterface
-   *   Typed configuration data.
+   * {@inheritdoc}
    */
   public function get($name) {
     $data = $this->configStorage->read($name);
@@ -283,8 +275,12 @@ class TypedConfigManager extends TypedDataManager implements TypedConfigManagerI
         return $value;
       }
       elseif (!$parts) {
+        $value = $data[$name];
+        if (is_bool($value)) {
+          $value = (int) $value;
+        }
         // If no more parts left, this is the final property.
-        return (string)$data[$name];
+        return (string) $value;
       }
       else {
         // Get nested value and continue processing.
@@ -324,32 +320,19 @@ class TypedConfigManager extends TypedDataManager implements TypedConfigManagerI
     parent::alterDefinitions($definitions);
     $altered_schema = array_keys($definitions);
     if ($discovered_schema != $altered_schema) {
-      $added_keys = array_diff($altered_schema, $discovered_schema);
-      $removed_keys = array_diff($discovered_schema, $altered_schema);
+      $added_keys = implode(',', array_diff($altered_schema, $discovered_schema));
+      $removed_keys = implode(',', array_diff($discovered_schema, $altered_schema));
       if (!empty($added_keys) && !empty($removed_keys)) {
-        $message = 'Invoking hook_config_schema_info_alter() has added (@added) and removed (@removed) schema definitions';
+        $message = "Invoking hook_config_schema_info_alter() has added ($added_keys) and removed ($removed_keys) schema definitions";
       }
       elseif (!empty($added_keys)) {
-        $message = 'Invoking hook_config_schema_info_alter() has added (@added) schema definitions';
+        $message = "Invoking hook_config_schema_info_alter() has added ($added_keys) schema definitions";
       }
       else {
-        $message = 'Invoking hook_config_schema_info_alter() has removed (@removed) schema definitions';
+        $message = "Invoking hook_config_schema_info_alter() has removed ($removed_keys) schema definitions";
       }
-      throw new ConfigSchemaAlterException(SafeMarkup::format($message, ['@added' => implode(',', $added_keys), '@removed' => implode(',', $removed_keys)]));
+      throw new ConfigSchemaAlterException($message);
     }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function createInstance($data_type, array $configuration = array()) {
-    $instance = parent::createInstance($data_type, $configuration);
-    // Enable elements to construct their own definitions using the typed config
-    // manager.
-    if ($instance instanceof ArrayElement) {
-      $instance->setTypedConfig($this);
-    }
-    return $instance;
   }
 
 }

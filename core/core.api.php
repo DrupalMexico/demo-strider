@@ -24,7 +24,8 @@
  *
  * @section interface User interface
  *
- * - @link menu Routing, page controllers, and menu entries @endlink
+ * - @link menu Menu entries, local tasks, and other links @endlink
+ * - @link routing Routing API and page controllers @endlink
  * - @link form_api Forms @endlink
  * - @link block_api Blocks @endlink
  * - @link ajax Ajax @endlink
@@ -49,6 +50,7 @@
  * - @link user_api User accounts, permissions, and roles @endlink
  * - @link theme_render Render API @endlink
  * - @link themeable Theme system @endlink
+ * - @link update_api Update API @endlink
  * - @link migration Migration @endlink
  *
  * @section additional Additional topics
@@ -57,6 +59,7 @@
  * - @link queue Queue API @endlink
  * - @link typed_data Typed Data @endlink
  * - @link testing Automated tests @endlink
+ * - @link php_assert PHP Runtime Assert Statements @endlink
  * - @link third_party Integrating third-party applications @endlink
  *
  * @section more_info Further information
@@ -88,10 +91,12 @@
  * returned response) for its HTTP requests. REST requests are separated into
  * several types, known as methods, including:
  * - GET: Requests to obtain data.
- * - PUT: Requests to update or create data.
+ * - POST: Requests to update or create data.
+ * - PUT: Requests to update or create data (limited support, currently unused
+ *   by entity resources).
  * - PATCH: Requests to update a subset of data, such as one field.
  * - DELETE: Requests to delete data.
- * The Drupal Core REST module provides support for GET, PUT, PATCH, and DELETE
+ * The Drupal Core REST module provides support for GET, POST, PATCH, and DELETE
  * quests on entities, GET requests on the database log from the Database
  * Logging module, and a plugin framework for providing REST support for other
  * data and other methods.
@@ -110,7 +115,7 @@
  *   and HAL.
  * - Node entity support is configured by default. If you would like to support
  *   other types of entities, you can copy
- *   core/modules/rest/config/install/rest.settings.yml to your staging
+ *   core/modules/rest/config/install/rest.settings.yml to your sync
  *   configuration directory, appropriately modified for other entity types,
  *   and import it. Support for GET on the log from the Database Logging module
  *   can also be enabled in this way; in this case, the 'entity:node' line
@@ -229,11 +234,23 @@
  * Whether or not configuration files are being used for the active
  * configuration storage on a particular site, configuration files are always
  * used for:
- * - Defining the default configuration for a module, which is imported to the
- *   active storage when the module is enabled. Note that changes to this
- *   default configuration after a module is already enabled have no effect;
- *   to make a configuration change after a module is enabled, you would need
- *   to uninstall/reinstall or use a hook_update_N() function.
+ * - Defining the default configuration for an extension (module, theme, or
+ *   profile), which is imported to the active storage when the extension if
+ *   enabled. These configuration items are located in the config/install
+ *   sub-directory of the extension. Note that changes to this configuration
+ *   after a module or theme is already enabled have no effect; to make a
+ *   configuration change after a module or theme is enabled, you would need to
+ *   uninstall/reinstall or use a hook_update_N() function.
+ * - Defining optional configuration for a module or theme. Optional
+ *   configuration items are located in the config/optional sub-directory of the
+ *   extension. These configuration items have dependencies that are not
+ *   explicit dependencies of the extension, so they are only installed if all
+ *   dependencies are met. For example, in the scenario that module A defines a
+ *   dependency which requires module B, but module A is installed first and
+ *   module B some time later, then module A's config/optional directory will be
+ *   scanned at that time for newly met dependencies, and the configuration will
+ *   be installed then. If module B is never installed, the configuration item
+ *   will not be installed either.
  * - Exporting and importing configuration.
  *
  * The file storage format for configuration information in Drupal is
@@ -317,9 +334,8 @@
  *   modulename.schema.yml file, with an entry for 'modulename.config_prefix.*'.
  *   For example, for the Role entity, the file user.schema.yml has an entry
  *   user.role.*; see @ref sec_yaml above for more information.
- * - Your module may also provide a few configuration items to be installed by
- *   default, by adding configuration files to the module's config/install
- *   directory; see @ref sec_yaml above for more information.
+ * - Your module can provide default/optional configuration entities in YAML
+ *   files; see @ref sec_yaml above for more information.
  * - Some configuration entities have dependencies on other configuration
  *   entities, and module developers need to consider this so that configuration
  *   can be imported, uninstalled, and synchronized in the right order. For
@@ -566,6 +582,9 @@
  * @code
  *  $settings['cache']['default'] = 'cache.custom';
  * @endcode
+ *
+ * Finally, you can chain multiple cache backends together, see
+ * \Drupal\Core\Cache\ChainedFastBackend and \Drupal\Core\Cache\BackendChain.
  *
  * @see https://www.drupal.org/node/1884796
  * @}
@@ -829,42 +848,115 @@
  * @{
  * API for describing data based on a set of available data types.
  *
- * The Typed Data API was created to provide developers with a consistent
- * interface for interacting with data, as well as an API for metadata
- * (information about the data, such as the data type, whether it is
- * translatable, and who can access it). The Typed Data API is used in several
- * Drupal sub-systems, such as the Entity Field API and Configuration API.
+ * PHP has data types, such as int, string, float, array, etc., and it is an
+ * object-oriented language that lets you define classes and interfaces.
+ * However, in some cases, it is useful to be able to define an abstract
+ * type (as in an interface, free of implementation details), that still has
+ * properties (which an interface cannot) as well as meta-data. The Typed Data
+ * API provides this abstraction.
+ *
+ * @section sec_overview Overview
+ * Each data type in the Typed Data API is a plugin class (annotation class
+ * example: \Drupal\Core\TypedData\Annotation\DataType); these plugins are
+ * managed by the typed_data_manager service (by default
+ * \Drupal\Core\TypedData\TypedDataManager). Each data object encapsulates a
+ * single piece of data, provides access to the metadata, and provides
+ * validation capability. Also, the typed data plugins have a shorthand
+ * for easily accessing data values, described in @ref sec_tree.
+ *
+ * The metadata of a data object is defined by an object based on a class called
+ * the definition class (see \Drupal\Core\TypedData\DataDefinitionInterface).
+ * The class used can vary by data type and can be specified in the data type's
+ * plugin definition, while the default is set in the $definition_class property
+ * of the annotation class. The default class is
+ * \Drupal\Core\TypedData\DataDefinition. For data types provided by a plugin
+ * deriver, the plugin deriver can set the definition_class property too.
+ * The metadata object provides information about the data, such as the data
+ * type, whether it is translatable, the names of its properties (for complex
+ * types), and who can access it.
  *
  * See https://www.drupal.org/node/1794140 for more information about the Typed
  * Data API.
  *
- * @section interfaces Interfaces and classes in the Typed Data API
- * There are several basic interfaces in the Typed Data API, representing
- * different types of data:
- * - \Drupal\Core\TypedData\PrimitiveInterface: Used for primitive data, such
- *   as strings, numeric types, etc. Drupal provides primitive types for
- *   integers, strings, etc. based on this interface, and you should
- *   not ever need to create new primitive types.
- * - \Drupal\Core\TypedData\TypedDataInterface: Used for single pieces of data,
- *   with some information about its context. Abstract base class
- *   \Drupal\Core\TypedData\TypedData is a useful starting point, and contains
- *   documentation on how to extend it.
- * - \Drupal\Core\TypedData\ComplexDataInterface: Used for complex data, which
- *   contains named and typed properties; extends TypedDataInterface. Examples
- *   of complex data include content entities and field items. See the
- *   @link entity_api Entity API topic @endlink for more information about
- *   entities; for most complex data, developers should use entities.
- * - \Drupal\Core\TypedData\ListInterface: Used for a sequential list of other
- *   typed data. Class \Drupal\Core\TypedData\Plugin\DataType\ItemList is a
- *   generic implementation of this interface, and it is used by default for
- *   data declared as a list of some other data type. You can also define a
- *   custom list class, in which case ItemList is a useful base class.
+ * @section sec_varieties Varieties of typed data
+ * There are three kinds of typed data: primitive, complex, and list.
  *
- * @section defining Defining data types
+ * @subsection sub_primitive Primitive data types
+ * Primitive data types wrap PHP data types and also serve as building blocks
+ * for complex and list typed data. Each primitive data type has an interface
+ * that extends \Drupal\Core\TypedData\PrimitiveInterface, with getValue()
+ * and setValue() methods for accessing the data value, and a default plugin
+ * implementation. Here's a list:
+ * - \Drupal\Core\TypedData\Type\IntegerInterface: Plugin ID integer,
+ *   corresponds to PHP type int.
+ * - \Drupal\Core\TypedData\Type\StringInterface: Plugin ID string,
+ *   corresponds to PHP type string.
+ * - \Drupal\Core\TypedData\Type\FloatInterface: Plugin ID float,
+ *   corresponds to PHP type float.
+ * - \Drupal\Core\TypedData\Type\BooleanInterface: Plugin ID bool,
+ *   corresponds to PHP type bool.
+ * - \Drupal\Core\TypedData\Type\BinaryInterface: Plugin ID binary,
+ *   corresponds to a PHP file resource.
+ * - \Drupal\Core\TypedData\Type\UriInterface: Plugin ID uri.
+ *
+ * @subsection sec_complex Complex data
+ * Complex data types, with interface
+ * \Drupal\Core\TypedData\ComplexDataInterface, represent data with named
+ * properties; the properties can be accessed with get() and set() methods.
+ * The value of each property is itself a typed data object, which can be
+ * primitive, complex, or list data.
+ *
+ * The base type for most complex data is the
+ * \Drupal\Core\TypedData\Plugin\DataType\Map class, which represents an
+ * associative array. Map provides its own definition class in the annotation,
+ * \Drupal\Core\TypedData\MapDataDefinition, and most complex data classes
+ * extend this class. The getValue() and setValue() methods on the Map class
+ * enforce the data definition and its property structure.
+ *
+ * The Drupal Field API uses complex typed data for its field items, with
+ * definition class \Drupal\Core\Field\TypedData\FieldItemDataDefinition.
+ *
+ * @section sec_list Lists
+ * List data types, with interface \Drupal\Core\TypedData\ListInterface,
+ * represent data that is an ordered list of typed data, all of the same type.
+ * More precisely, the plugins in the list must have the same base plugin ID;
+ * however, some types (for example field items and entities) are provided by
+ * plugin derivatives and the sub IDs can be different.
+ *
+ * @section sec_tree Tree handling
+ * Typed data allows you to use shorthand to get data values nested in the
+ * implicit tree structure of the data. For example, to get the value from
+ * an entity field item, the Entity Field API allows you to call:
+ * @code
+ * $value = $entity->fieldName->propertyName;
+ * @endcode
+ * This is really shorthand for:
+ * @code
+ * $field_item_list = $entity->get('fieldName');
+ * $field_item = $field_item_list->get(0);
+ * $property = $field_item->get('propertyName');
+ * $value = $property->getValue();
+ * @endcode
+ * Some notes:
+ * - $property, $field_item, and $field_item_list are all typed data objects,
+ *   while $value is a raw PHP value.
+ * - You can call $property->getParent() to get $field_item,
+ *   $field_item->getParent() to get $field_item_list, or
+ *   $field_item_list->getParent() to get $typed_entity ($entity wrapped in a
+ *   typed data object). $typed_entity->getParent() is NULL.
+ * - For all of these ->getRoot() returns $typed_entity.
+ * - The langcode property is on $field_item_list, but you can access it
+ *   on $property as well, so that all items will report the same langcode.
+ * - When the value of $property is changed by calling $property->setValue(),
+ *   $property->onChange() will fire, which in turn calls the parent object's
+ *   onChange() method and so on. This allows parent objects to react upon
+ *   changes of contained properties or list items.
+ *
+ * @section sec_defining Defining data types
  * To define a new data type:
  * - Create a class that implements one of the Typed Data interfaces.
  *   Typically, you will want to extend one of the classes listed in the
- *   section above as a starting point.
+ *   sections above as a starting point.
  * - Make your class into a DataType plugin. To do that, put it in namespace
  *   \Drupal\yourmodule\Plugin\DataType (where "yourmodule" is your module's
  *   short name), and add annotation of type
@@ -872,7 +964,7 @@
  *   See the @link plugin_api Plugin API topic @endlink and the
  *   @link annotation Annotations topic @endlink for more information.
  *
- * @section using Using data types
+ * @section sec_using Using data types
  * The data types of the Typed Data API can be used in several ways, once they
  * have been defined:
  * - In the Field API, data types can be used as the class in the property
@@ -881,6 +973,15 @@
  * - In configuration schema files, you can use the unique ID ('id' annotation)
  *   from any DataType plugin class as the 'type' value for an entry. See the
  *   @link config_api Confuration API topic @endlink for more information.
+ * - If you need to create a typed data object in code, first get the
+ *   typed_data_manager service from the container or by calling
+ *   \Drupal::typedDataManager(). Then pass the plugin ID to
+ *   $manager::createDataDefinition() to create an appropriate data definition
+ *   object. Then pass the data definition object and the value of the data to
+ *   $manager::create() to create a typed data object.
+ *
+ * @see plugin_api
+ * @see container
  * @}
  */
 
@@ -979,6 +1080,55 @@
  *
  * PHPUnit tests can also be run from the command line, using the PHPUnit
  * framework. See https://www.drupal.org/node/2116263 for more information.
+ * @}
+ */
+
+/**
+ * @defgroup php_assert PHP Runtime Assert Statements
+ * @{
+ * Use of the assert() statement in Drupal.
+ *
+ * Unit tests also use the term "assertion" to refer to test conditions, so to
+ * avoid confusion the term "runtime assertion" will be used for the assert()
+ * statement throughout the documentation.
+ *
+ * A runtime assertion is a statement that is expected to always be true at
+ * the point in the code it appears at. They are tested using PHP's internal
+ * @link http://www.php.net/assert assert() @endlink statement. If an
+ * assertion is ever FALSE it indicates an error in the code or in module or
+ * theme configuration files. User-provided configuration files should be
+ * verified with standard control structures at all times, not just checked in
+ * development environments with assert() statements on.
+ *
+ * When runtime assertions fail in PHP 7 an \AssertionError is thrown.
+ * Drupal uses an assertion callback to do the same in PHP 5.x so that unit
+ * tests involving runtime assertions will work uniformly across both versions.
+ *
+ * The Drupal project primarily uses runtime assertions to enforce the
+ * expectations of the API by failing when incorrect calls are made by code
+ * under development. While PHP type hinting does this for objects and arrays,
+ * runtime assertions do this for scalars (strings, integers, floats, etc.) and
+ * complex data structures such as cache and render arrays. They ensure that
+ * methods' return values are the documented datatypes. They also verify that
+ * objects have been properly configured and set up by the service container.
+ * Runtime assertions are checked throughout development. They supplement unit
+ * tests by checking scenarios that do not have unit tests written for them,
+ * and by testing the API calls made by all the code in the system.
+ *
+ * When using assert() keep the following in mind:
+ * - Runtime assertions are disabled by default in production and enabled in
+ *   development, so they can't be used as control structures. Use exceptions
+ *   for errors that can occur in production no matter how unlikely they are.
+ * - Assert() functions in a buggy manner prior to PHP 7. If you do not use a
+ *   string for the first argument of the statement but instead use a function
+ *   call or expression then that code will be evaluated even when runtime
+ *   assertions are turned off. To avoid this you must use a string as the
+ *   first argument, and assert will pass this string to the eval() statement.
+ * - Since runtime assertion strings are parsed by eval() use caution when
+ *   using them to work with data that may be unsanitized.
+ *
+ * See https://www.drupal.org/node/2492225 for more information on runtime
+ * assertions.
  * @}
  */
 
@@ -1811,7 +1961,7 @@ function hook_mail($key, &$message, $params) {
   $context = $params['context'];
   $variables = array(
     '%site_name' => \Drupal::config('system.site')->get('name'),
-    '%username' => user_format_name($account),
+    '%username' => $account->getDisplayName(),
   );
   if ($context['hook'] == 'taxonomy') {
     $entity = $params['entity'];
@@ -2054,12 +2204,6 @@ function hook_validation_constraint_alter(array &$definitions) {
  * an array. Here are the details of its elements, all of which are optional:
  * - callback: The callback to invoke to handle the server side of the
  *   Ajax event. More information on callbacks is below in @ref sub_callback.
- * - path: The URL path to use for the request. If omitted, defaults to
- *   'system/ajax', which invokes the default Drupal Ajax processing (this will
- *   call the callback supplied in the 'callback' element). If you supply a
- *   path, you must set up a routing entry to handle the request yourself and
- *   return output described in @ref sub_callback below. See the
- *   @link menu Routing topic @endlink for more information on routing.
  * - wrapper: The HTML 'id' attribute of the area where the content returned by
  *   the callback should be placed. Note that callbacks have a choice of
  *   returning content or JavaScript commands; 'wrapper' is used for content
@@ -2085,6 +2229,13 @@ function hook_validation_constraint_alter(array &$definitions) {
  *   - message: Translated message to display.
  *   - url: For a bar progress indicator, URL path for determining progress.
  *   - interval: For a bar progress indicator, how often to update it.
+ * - url: A \Drupal\Core\Url to which to submit the Ajax request. If omitted,
+ *   defaults to either the same URL as the form or link destination is for
+ *   someone with JavaScript disabled, or a slightly modified version (e.g.,
+ *   with a query parameter added, removed, or changed) of that URL if
+ *   necessary to support Drupal's content negotiation. It is recommended to
+ *   omit this key and use Drupal's content negotiation rather than using
+ *   substantially different URLs between Ajax and non-Ajax.
  *
  * @subsection sub_callback Setting up a callback to process Ajax
  * Once you have set up your form to trigger an Ajax response (see @ref sub_form
@@ -2186,6 +2337,13 @@ function hook_validation_constraint_alter(array &$definitions) {
  *   at the end of a request to finalize operations, if this service was
  *   instantiated. Services should implement \Drupal\Core\DestructableInterface
  *   in this case.
+ * - context_provider: Indicates a block context provider, used for example
+ *   by block conditions. It has to implement
+ *   \Drupal\Core\Plugin\Context\ContextProviderInterface.
+ * - http_client_middleware: Indicates that the service provides a guzzle
+ *   middleware, see
+ *   https://guzzle.readthedocs.org/en/latest/handlers-and-middleware.html for
+ *   more information.
  *
  * Creating a tag for a service does not do anything on its own, but tags
  * can be discovered or queried in a compiler pass when the container is built,

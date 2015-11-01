@@ -142,8 +142,9 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
    */
   protected function getDiscovery() {
     if (!isset($this->discovery)) {
-      $this->discovery = new YamlDiscovery('links.action', $this->moduleHandler->getModuleDirectories());
-      $this->discovery = new ContainerDerivativeDiscoveryDecorator($this->discovery);
+      $yaml_discovery = new YamlDiscovery('links.action', $this->moduleHandler->getModuleDirectories());
+      $yaml_discovery->addTranslatableProperty('title', 'title_context');
+      $this->discovery = new ContainerDerivativeDiscoveryDecorator($yaml_discovery);
     }
     return $this->discovery;
   }
@@ -190,10 +191,11 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
           'url' => Url::fromRoute($route_name, $route_parameters),
           'localized_options' => $plugin->getOptions($this->routeMatch),
         ),
-        '#access' => $this->accessManager->checkNamedRoute($route_name, $route_parameters, $this->account),
+        '#access' => $this->accessManager->checkNamedRoute($route_name, $route_parameters, $this->account, TRUE),
         '#weight' => $plugin->getWeight(),
       );
     }
+
     return $links;
   }
 

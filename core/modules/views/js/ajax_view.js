@@ -5,13 +5,15 @@
 
 (function ($, Drupal, drupalSettings) {
 
-  "use strict";
+  'use strict';
 
   /**
-   * Attaches the AJAX behavior to Views exposed filter forms and key View
-   * links.
+   * Attaches the AJAX behavior to exposed filters forms and key View links.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches ajaxView functionality to relevant elements.
    */
   Drupal.behaviors.ViewsAjaxView = {};
   Drupal.behaviors.ViewsAjaxView.attach = function () {
@@ -41,7 +43,9 @@
    * @constructor
    *
    * @param {object} settings
+   *   Settings object for the ajax view.
    * @param {string} settings.view_dom_id
+   *   The DOM id of the view.
    */
   Drupal.views.ajaxView = function (settings) {
     var selector = '.js-view-dom-id-' + settings.view_dom_id;
@@ -52,7 +56,7 @@
 
     // If there are multiple views this might've ended up showing up multiple
     // times.
-    if (ajax_path.constructor.toString().indexOf("Array") !== -1) {
+    if (ajax_path.constructor.toString().indexOf('Array') !== -1) {
       ajax_path = ajax_path[0];
     }
 
@@ -108,14 +112,15 @@
    * @method
    */
   Drupal.views.ajaxView.prototype.attachExposedFormAjax = function () {
-    var button = $('input[type=submit], input[type=image]', this.$exposed_form);
-    button = button[0];
-
-    var self_settings = $.extend({}, this.element_settings, {
-      base: $(button).attr('id'),
-      element: button
+    var that = this;
+    this.exposedFormAjax = [];
+    $('input[type=submit], input[type=image]', this.$exposed_form).each(function (index) {
+      var self_settings = $.extend({}, that.element_settings, {
+        base: $(this).attr('id'),
+        element: this
+      });
+      that.exposedFormAjax[index] = Drupal.ajax(self_settings);
     });
-    this.exposedFormAjax = Drupal.ajax(self_settings);
   };
 
   /**
@@ -141,8 +146,10 @@
   /**
    * Attach the ajax behavior to a singe link.
    *
-   * @param {string} id
+   * @param {string} [id]
+   *   The ID of the link.
    * @param {HTMLElement} link
+   *   The link element.
    */
   Drupal.views.ajaxView.prototype.attachPagerLinkAjax = function (id, link) {
     var $link = $(link);
@@ -167,10 +174,14 @@
   };
 
   /**
+   * Views scroll to top ajax command.
    *
    * @param {Drupal.Ajax} [ajax]
+   *   A {@link Drupal.ajax} object.
    * @param {object} response
+   *   Ajax response.
    * @param {string} response.selector
+   *   Selector to use.
    */
   Drupal.AjaxCommands.prototype.viewsScrollTop = function (ajax, response) {
     // Scroll to the top of the view. This will allow users

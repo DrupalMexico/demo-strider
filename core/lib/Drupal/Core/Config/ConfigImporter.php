@@ -11,7 +11,6 @@ use Drupal\Core\Config\Importer\MissingContentEvent;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Extension\ModuleInstallerInterface;
 use Drupal\Core\Extension\ThemeHandlerInterface;
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Config\Entity\ImportableEntityStorageInterface;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\Entity\EntityStorageException;
@@ -368,8 +367,8 @@ class ConfigImporter {
     $current_extensions = $this->storageComparer->getTargetStorage()->read('core.extension');
     $new_extensions = $this->storageComparer->getSourceStorage()->read('core.extension');
 
-    // If there is no extension information in staging then exit. This is
-    // probably due to an empty staging directory.
+    // If there is no extension information in sync then exit. This is probably
+    // due to an empty sync directory.
     if (!$new_extensions) {
       return;
     }
@@ -719,11 +718,11 @@ class ConfigImporter {
         $old_entity_type_id = $this->configManager->getEntityTypeIdByName($names['old_name']);
         $new_entity_type_id = $this->configManager->getEntityTypeIdByName($names['new_name']);
         if ($old_entity_type_id != $new_entity_type_id) {
-          $this->logError($this->t('Entity type mismatch on rename. !old_type not equal to !new_type for existing configuration !old_name and staged configuration !new_name.', array('old_type' => $old_entity_type_id, 'new_type' => $new_entity_type_id, 'old_name' => $names['old_name'], 'new_name' => $names['new_name'])));
+          $this->logError($this->t('Entity type mismatch on rename. @old_type not equal to @new_type for existing configuration @old_name and staged configuration @new_name.', array('@old_type' => $old_entity_type_id, '@new_type' => $new_entity_type_id, '@old_name' => $names['old_name'], '@new_name' => $names['new_name'])));
         }
         // Has to be a configuration entity.
         if (!$old_entity_type_id) {
-          $this->logError($this->t('Rename operation for simple configuration. Existing configuration !old_name and staged configuration !new_name.', array('old_name' => $names['old_name'], 'new_name' => $names['new_name'])));
+          $this->logError($this->t('Rename operation for simple configuration. Existing configuration @old_name and staged configuration @new_name.', array('@old_name' => $names['old_name'], '@new_name' => $names['new_name'])));
         }
       }
       $this->eventDispatcher->dispatch(ConfigEvents::IMPORT_VALIDATE, new ConfigImporterEvent($this));
@@ -781,7 +780,7 @@ class ConfigImporter {
    *   The name of the extension to process.
    */
   protected function processExtension($type, $op, $name) {
-    // Set the config installer to use the staging directory instead of the
+    // Set the config installer to use the sync directory instead of the
     // extensions own default config directories.
     \Drupal::service('config.installer')
       ->setSyncing(TRUE)
@@ -972,7 +971,7 @@ class ConfigImporter {
       // Call to the configuration entity's storage to handle the configuration
       // change.
       if (!($entity_storage instanceof ImportableEntityStorageInterface)) {
-        throw new EntityStorageException(SafeMarkup::format('The entity storage "@storage" for the "@entity_type" entity type does not support imports', array('@storage' => get_class($entity_storage), '@entity_type' => $entity_type)));
+        throw new EntityStorageException(sprintf('The entity storage "%s" for the "%s" entity type does not support imports', get_class($entity_storage), $entity_type));
       }
       $entity_storage->$method($name, $new_config, $old_config);
       $this->setProcessedConfiguration($collection, $op, $name);
@@ -1018,7 +1017,7 @@ class ConfigImporter {
     // Call to the configuration entity's storage to handle the configuration
     // change.
     if (!($entity_storage instanceof ImportableEntityStorageInterface)) {
-      throw new EntityStorageException(SafeMarkup::format('The entity storage "@storage" for the "@entity_type" entity type does not support imports', array('@storage' => get_class($entity_storage), '@entity_type' => $entity_type_id)));
+      throw new EntityStorageException(sprintf("The entity storage '%s' for the '%s' entity type does not support imports", get_class($entity_storage), $entity_type_id));
     }
     $entity_storage->importRename($names['old_name'], $new_config, $old_config);
     $this->setProcessedConfiguration($collection, 'rename', $rename_name);

@@ -4,7 +4,6 @@
  * Install, update and uninstall functions for the standard installation profile.
  */
 
-use Drupal\comment\Plugin\Field\FieldType\CommentItemInterface;
 use Drupal\user\Entity\User;
 use Drupal\user\RoleInterface;
 
@@ -16,12 +15,6 @@ use Drupal\user\RoleInterface;
  * @see system_install()
  */
 function standard_install() {
-  // Now that all modules are installed, make sure the entity storage and other
-  // handlers are up to date with the current entity and field definitions. For
-  // example, Path module adds a base field to nodes and taxonomy terms after
-  // those modules are already installed.
-  \Drupal::service('entity.definition_update_manager')->applyUpdates();
-
   // Set front page to "node".
   \Drupal::configFactory()->getEditable('system.site')->set('page.front', '/node')->save(TRUE);
 
@@ -65,6 +58,10 @@ function standard_install() {
     'link' => array('uri' => 'internal:/admin/content'),
   ));
   $shortcut->save();
+
+  // Allow all users to use search.
+  user_role_grant_permissions(RoleInterface::ANONYMOUS_ID, array('search content'));
+  user_role_grant_permissions(RoleInterface::AUTHENTICATED_ID, array('search content'));
 
   // Enable the admin theme.
   \Drupal::configFactory()->getEditable('node.settings')->set('use_admin_theme', TRUE)->save(TRUE);

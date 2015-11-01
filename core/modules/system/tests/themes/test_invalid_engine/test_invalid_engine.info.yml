@@ -4,9 +4,10 @@ description: 'Test theme which has a non-existent theme engine.'
 # version: VERSION
 # core: 8.x
 engine: not_real_engine
+base theme: false
 
-# Information added by Drupal.org packaging script on 2015-06-29
-version: '8.0.0-beta12'
+# Information added by Drupal.org packaging script on 2015-10-21
+version: '8.0.0-rc2'
 core: '8.x'
 project: 'drupal'
-datestamp: 1435602053
+datestamp: 1445469654

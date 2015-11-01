@@ -7,7 +7,7 @@
 
 (function ($, _, Backbone, Drupal) {
 
-  "use strict";
+  'use strict';
 
   // Indicates whether the page should be reloaded after in-place editing has
   // shut down. A page reload is necessary to re-instate the original HTML of
@@ -42,11 +42,9 @@
       this.changedFieldStates = ['changed', 'saving', 'saved', 'invalid'];
       this.readyFieldStates = ['candidate', 'highlighted'];
 
-      this.listenTo(options.entitiesCollection, {
-        // Track app state.
-        'change:state': this.appStateChange,
-        'change:isActive': this.enforceSingleActiveEntity
-      });
+      // Track app state.
+      this.listenTo(options.entitiesCollection, 'change:state', this.appStateChange);
+      this.listenTo(options.entitiesCollection, 'change:isActive', this.enforceSingleActiveEntity);
 
       // Track app state.
       this.listenTo(options.fieldsCollection, 'change:state', this.editorStateChange);
@@ -129,6 +127,7 @@
      *   The fieldModel to which this change applies.
      *
      * @return {bool}
+     *   Whether the editor change was accepted or rejected.
      */
     acceptEditorStateChange: function (from, to, context, fieldModel) {
       var accept = true;
@@ -330,6 +329,7 @@
      * Asks the user to confirm whether he wants to stop editing via a modal.
      *
      * @param {Drupal.quickedit.EntityModel} entityModel
+     *   An instance of the EntityModel class.
      *
      * @see Drupal.quickedit.AppView#acceptEditorStateChange
      */
@@ -404,6 +404,7 @@
      * Reacts to field state changes; tracks global state.
      *
      * @param {Drupal.quickedit.FieldModel} fieldModel
+     *   The `fieldModel` holding the state.
      * @param {string} state
      *   The state of the associated field. One of
      *   {@link Drupal.quickedit.FieldModel.states}.

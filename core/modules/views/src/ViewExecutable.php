@@ -8,16 +8,11 @@
 namespace Drupal\views;
 
 use Drupal\Component\Utility\Html;
-use Drupal\Core\Cache\Cache;
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Routing\RouteProviderInterface;
 use Drupal\Core\Session\AccountInterface;
-use Drupal\Core\Url;
 use Drupal\views\Plugin\views\display\DisplayRouterInterface;
-use Drupal\views\Plugin\views\query\QueryPluginBase;
-use Drupal\views\ViewEntityInterface;
 use Drupal\Component\Utility\Tags;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -400,11 +395,11 @@ class ViewExecutable implements \Serializable {
    *
    * @var array
    *
-   * @see drupal_process_attached
+   * @see \Drupal\Core\Render\AttachmentsResponseProcessorInterface::processAttachments()
    */
   public $element = [
     '#attached' => [
-      'library' => [],
+      'library' => ['views/views.module'],
       'drupalSettings' => [],
     ],
     '#cache' => [],
@@ -457,9 +452,6 @@ class ViewExecutable implements \Serializable {
     $this->user = $user;
     $this->viewsData = $views_data;
     $this->routeProvider = $route_provider;
-
-    // Add the default css for a view.
-    $this->element['#attached']['library'][] = 'views/views.module';
   }
 
   /**
@@ -1029,8 +1021,8 @@ class ViewExecutable implements \Serializable {
         }
 
         // Add this argument's substitution
-        $substitutions['%' . ($position + 1)] = $arg_title;
-        $substitutions['!' . ($position + 1)] = strip_tags(Html::decodeEntities($arg));
+        $substitutions["{{ arguments.$id }}"] = $arg_title;
+        $substitutions["{{ raw_arguments.$id }}"] = strip_tags(Html::decodeEntities($arg));
 
         // Test to see if we should use this argument's title
         if (!empty($argument->options['title_enable']) && !empty($argument->options['title'])) {
@@ -1372,11 +1364,11 @@ class ViewExecutable implements \Serializable {
     $themes[] = $active_theme->getName();
 
     // Check for already-cached output.
+    /** @var \Drupal\views\Plugin\views\cache\CachePluginBase $cache */
     if (!empty($this->live_preview)) {
-      $cache = FALSE;
+      $cache = Views::pluginManager('cache')->createInstance('none');
     }
     else {
-      /** @var \Drupal\views\Plugin\views\cache\CachePluginBase $cache */
       $cache = $this->display_handler->getPlugin('cache');
     }
 
@@ -1432,9 +1424,7 @@ class ViewExecutable implements \Serializable {
 
     $exposed_form->postRender($this->display_handler->output);
 
-    if ($cache) {
-      $cache->postRender($this->display_handler->output);
-    }
+    $cache->postRender($this->display_handler->output);
 
     // Let modules modify the view output after it is rendered.
     $module_handler->invokeAll('views_post_render', array($this, &$this->display_handler->output, $cache));
@@ -1443,7 +1433,7 @@ class ViewExecutable implements \Serializable {
     foreach ($themes as $theme_name) {
       $function = $theme_name . '_views_post_render';
       if (function_exists($function)) {
-        $function($this);
+        $function($this, $this->display_handler->output, $cache);
       }
     }
 
@@ -1616,29 +1606,6 @@ class ViewExecutable implements \Serializable {
   }
 
   /**
-   * Returns menu links from the view and the named display handler.
-   *
-   * @param string $display_id
-   *   A display ID.
-   *
-   * @return array|bool
-   *   The generated menu links for this view and display, FALSE if the call
-   *   to ::setDisplay failed.
-   */
-  public function getMenuLinks($display_id = NULL) {
-    // Prepare the view with the information we have. This was probably already
-    // called, but it's good to be safe.
-    if (!$this->setDisplay($display_id)) {
-      return FALSE;
-    }
-
-    // Execute the hook.
-    if (isset($this->display_handler)) {
-      return $this->display_handler->getMenuLinks();
-    }
-  }
-
-  /**
    * Determine if the given user has access to the view. Note that
    * this sets the display handler if it hasn't been.
    */
@@ -1673,7 +1640,7 @@ class ViewExecutable implements \Serializable {
   /**
    * Sets the used response object of the view.
    *
-   * @param Symfony\Component\HttpFoundation\Response $response
+   * @param \Symfony\Component\HttpFoundation\Response $response
    *   The response object which should be set.
    */
   public function setResponse(Response $response) {
@@ -1897,7 +1864,7 @@ class ViewExecutable implements \Serializable {
   public function getUrlInfo($display_id = '') {
     $this->initDisplay();
     if (!$this->display_handler instanceof DisplayRouterInterface) {
-      throw new \InvalidArgumentException(SafeMarkup::format('You cannot generate a URL for the display @display_id', ['@display_id' => $display_id]));
+      throw new \InvalidArgumentException("You cannot generate a URL for the display '$display_id'");
     }
     return $this->display_handler->getUrlInfo();
   }
@@ -2344,15 +2311,16 @@ class ViewExecutable implements \Serializable {
   }
 
   /**
-   * Calculates dependencies for the view.
+   * Gets dependencies for the view.
    *
    * @see \Drupal\views\Entity\View::calculateDependencies()
+   * @see \Drupal\views\Entity\View::getDependencies()
    *
    * @return array
    *   An array of dependencies grouped by type (module, theme, entity).
    */
-  public function calculateDependencies() {
-    return $this->storage->calculateDependencies();
+  public function getDependencies() {
+    return $this->storage->calculateDependencies()->getDependencies();
   }
 
   /**

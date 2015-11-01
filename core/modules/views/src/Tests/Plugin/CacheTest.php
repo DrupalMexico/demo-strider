@@ -7,8 +7,9 @@
 
 namespace Drupal\views\Tests\Plugin;
 
+use Drupal\Core\Render\RenderContext;
 use Drupal\node\Entity\Node;
-use Drupal\views\Tests\ViewUnitTestBase;
+use Drupal\views\Tests\ViewKernelTestBase;
 use Drupal\views\Views;
 use Drupal\views_test_data\Plugin\views\filter\FilterTest as FilterPlugin;
 
@@ -18,7 +19,7 @@ use Drupal\views_test_data\Plugin\views\filter\FilterTest as FilterPlugin;
  * @group views
  * @see views_plugin_cache
  */
-class CacheTest extends ViewUnitTestBase {
+class CacheTest extends ViewKernelTestBase {
 
   /**
    * Views used by this test.
@@ -282,14 +283,18 @@ class CacheTest extends ViewUnitTestBase {
     $output = $view->buildRenderable();
     /** @var \Drupal\Core\Render\RendererInterface $renderer */
     $renderer = \Drupal::service('renderer');
-    $renderer->render($output);
+    $renderer->executeInRenderContext(new RenderContext(), function () use (&$output, $renderer) {
+      return $renderer->render($output);
+    });
 
     unset($view->pre_render_called);
     $view->destroy();
 
     $view->setDisplay();
     $output = $view->buildRenderable();
-    $renderer->render($output);
+    $renderer->executeInRenderContext(new RenderContext(), function () use (&$output, $renderer) {
+      return $renderer->render($output);
+    });
 
     $this->assertTrue(in_array('views_test_data/test', $output['#attached']['library']), 'Make sure libraries are added for cached views.');
     $this->assertEqual(['foo' => 'bar'], $output['#attached']['drupalSettings'], 'Make sure drupalSettings are added for cached views.');

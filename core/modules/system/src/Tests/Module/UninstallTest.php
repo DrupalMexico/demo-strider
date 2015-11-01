@@ -9,6 +9,7 @@ namespace Drupal\system\Tests\Module;
 
 use Drupal\Core\Cache\Cache;
 use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Entity\EntityMalformedException;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -50,11 +51,15 @@ class UninstallTest extends WebTestBase {
     $node_type->setThirdPartySetting('module_test', 'key', 'value');
     $node_type->save();
     // Add a node to prevent node from being uninstalled.
-    $node = entity_create('node', array('type' => 'uninstall_blocker'));
+    $node = entity_create('node', array('type' => 'uninstall_blocker', 'title' => $this->randomString()));
     $node->save();
 
     $this->drupalGet('admin/modules/uninstall');
     $this->assertTitle(t('Uninstall') . ' | Drupal');
+
+    // Be sure labels are rendered properly.
+    // @see regression https://www.drupal.org/node/2512106
+    $this->assertRaw('<label for="edit-uninstall-node" class="module-name table-filter-text-source">Node</label>');
 
     $this->assertText(\Drupal::translation()->translate('The following reason prevents Node from being uninstalled:'));
     $this->assertText(\Drupal::translation()->translate('There is content for the entity type: Content'));
@@ -67,7 +72,7 @@ class UninstallTest extends WebTestBase {
     $this->drupalPostForm('admin/modules/uninstall', $edit, t('Uninstall'));
     $this->assertNoText(\Drupal::translation()->translate('Configuration deletions'), 'No configuration deletions listed on the module install confirmation page.');
     $this->assertText(\Drupal::translation()->translate('Configuration updates'), 'Configuration updates listed on the module install confirmation page.');
-    $this->assertText($node_type->label(), SafeMarkup::format('The entity label "!label" found.', array('!label' => $node_type->label())));
+    $this->assertText($node_type->label());
     $this->drupalPostForm(NULL, NULL, t('Uninstall'));
     $this->assertText(t('The selected modules have been uninstalled.'), 'Modules status has been updated.');
 
@@ -83,7 +88,7 @@ class UninstallTest extends WebTestBase {
     $entity_types = array();
     foreach ($node_dependencies as $entity) {
       $label = $entity->label() ?: $entity->id();
-      $this->assertText($label, SafeMarkup::format('The entity label "!label" found.', array('!label' => $label)));
+      $this->assertText($label);
       $entity_types[] = $entity->getEntityTypeId();
     }
     $entity_types = array_unique($entity_types);
@@ -117,4 +122,31 @@ class UninstallTest extends WebTestBase {
     $this->assertUrl('admin/modules/uninstall');
     $this->assertTitle(t('Uninstall') . ' | Drupal');
   }
+
+  /**
+   * Tests that a module which fails to install can still be uninstalled.
+   */
+  public function testFailedInstallStatus() {
+    $account = $this->drupalCreateUser(array('administer modules'));
+    $this->drupalLogin($account);
+
+    $message = 'Exception thrown when installing module_installer_config_test with an invalid configuration file.';
+    try {
+      $this->container->get('module_installer')->install(array('module_installer_config_test'));
+      $this->fail($message);
+    } catch (EntityMalformedException $e) {
+      $this->pass($message);
+    }
+
+    // Even though the module failed to install properly, its configuration
+    // status is "enabled" and should still be available to uninstall.
+    $this->drupalGet('admin/modules/uninstall');
+    $this->assertText('Module installer config test');
+    $edit['uninstall[module_installer_config_test]'] = TRUE;
+    $this->drupalPostForm('admin/modules/uninstall', $edit, t('Uninstall'));
+    $this->drupalPostForm(NULL, NULL, t('Uninstall'));
+    $this->assertText(t('The selected modules have been uninstalled.'));
+    $this->assertNoText('Module installer config test');
+  }
+
 }

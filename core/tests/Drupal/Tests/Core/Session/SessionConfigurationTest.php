@@ -8,7 +8,6 @@
 namespace Drupal\Tests\Core\Session;
 
 use Drupal\Tests\UnitTestCase;
-use Drupal\Core\Session\SessionConfiguration;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -51,7 +50,7 @@ class SessionConfigurationTest extends UnitTestCase {
   public function providerTestGeneratedCookieDomain() {
     return [
       ['http://example.com/path/index.php', '.example.com'],
-      ['http://www.example.com/path/index.php', '.example.com'],
+      ['http://www.example.com/path/index.php', '.www.example.com'],
       ['http://subdomain.example.com/path/index.php', '.subdomain.example.com'],
       ['http://example.com:8080/path/index.php', '.example.com'],
       ['https://example.com/path/index.php', '.example.com'],

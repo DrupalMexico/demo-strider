@@ -1,12 +1,10 @@
 <?php
 
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\DrupalKernel;
 use Drupal\Core\Config\BootstrapConfigStorageFactory;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Database\DatabaseExceptionWrapper;
-use Drupal\Core\Database\Install\TaskException;
 use Drupal\Core\Form\FormState;
 use Drupal\Core\Installer\Exception\AlreadyInstalledException;
 use Drupal\Core\Installer\Exception\InstallerException;
@@ -347,11 +345,8 @@ function install_begin_request($class_loader, &$install_state) {
     ->register('language.default', 'Drupal\Core\Language\LanguageDefault')
     ->addArgument('%language.default_values%');
   $container
-    ->register('language_manager', 'Drupal\Core\Language\LanguageManager')
-    ->addArgument(new Reference('language.default'));
-  $container
     ->register('string_translation', 'Drupal\Core\StringTranslation\TranslationManager')
-    ->addArgument(new Reference('language_manager'));
+    ->addArgument(new Reference('language.default'));
 
   // Register the stream wrapper manager.
   $container
@@ -366,7 +361,7 @@ function install_begin_request($class_loader, &$install_state) {
   \Drupal::setContainer($container);
 
   // Determine whether base system services are ready to operate.
-  $install_state['config_verified'] = install_ensure_config_directory(CONFIG_ACTIVE_DIRECTORY) && install_ensure_config_directory(CONFIG_STAGING_DIRECTORY);
+  $install_state['config_verified'] = install_ensure_config_directory(CONFIG_SYNC_DIRECTORY);
   $install_state['database_verified'] = install_verify_database_settings($site_path);
   $install_state['settings_verified'] = $install_state['config_verified'] && $install_state['database_verified'];
 
@@ -1133,14 +1128,24 @@ function install_database_errors($database, $settings_file) {
     // Run tasks associated with the database type. Any errors are caught in the
     // calling function.
     Database::addConnectionInfo('default', 'default', $database);
-    try {
-      db_run_tasks($driver);
-    }
-    catch (TaskException $e) {
+
+    $errors = db_installer_object($driver)->runTasks();
+    if (count($errors)) {
+      $error_message = [
+        '#type' => 'inline_template',
+        '#template' => '{% trans %}Resolve all issues below to continue the installation. For help configuring your database server, see the <a href="https://www.drupal.org/getting-started/install">installation handbook</a>, or contact your hosting provider.{% endtrans%}{{ errors }}',
+        '#context' => [
+          'errors' => [
+            '#theme' => 'item_list',
+            '#items' => $errors,
+          ],
+        ],
+      ];
+
       // These are generic errors, so we do not have any specific key of the
       // database connection array to attach them to; therefore, we just put
       // them in the error array with standard numeric keys.
-      $errors[$driver . '][0'] = $e->getMessage();
+      $errors[$driver . '][0'] = \Drupal::service('renderer')->renderPlain($error_message);
     }
   }
   return $errors;
@@ -1308,7 +1313,7 @@ function install_select_language(&$install_state) {
         return;
       }
       else {
-        throw new InstallerException(t('Sorry, you must select a language to continue the installation.'));
+        throw new InstallerException(t('You must select a language to continue the installation.'));
       }
     }
   }
@@ -1350,7 +1355,7 @@ function install_download_translation(&$install_state) {
  *   original name. If the path contains a filename as well, that one will be
  *   used instead.
  *
- * @return boolean
+ * @return bool
  *   TRUE on success, FALSE on failure.
  */
 function install_retrieve_file($uri, $destination) {
@@ -1364,8 +1369,8 @@ function install_retrieve_file($uri, $destination) {
   }
 
   try {
-    $request = \Drupal::httpClient()->get($uri, array('headers' => array('Accept' => 'text/plain')));
-    $data = $request->getBody(TRUE);
+    $response = \Drupal::httpClient()->get($uri, array('headers' => array('Accept' => 'text/plain')));
+    $data = (string) $response->getBody();
     if (empty($data)) {
       return FALSE;
     }
@@ -1393,129 +1398,6 @@ function install_check_localization_server($uri) {
   catch (RequestException $e) {
     return FALSE;
   }
-}
-
-/**
- * Gets the core release version and release alternatives for localization.
- *
- * In case core is a development version or the translation file for the
- * release is not available, fall back to an earlier release.
- * For example, 8.2.0-dev might fall back to 8.1.0 and 8.0.0-dev
- * might fall back to 7.0.
- *
- * @param string $version
- *   (optional) Version of core trying to find translation files for.
- *
- * @return array
- *   Array of release data. Each array element is an associative array with:
- *   - core: Core compatibility version (e.g., 8.x).
- *   - version: Release version (e.g., 8.1.0).
- */
-function install_get_localization_release($version = \Drupal::VERSION) {
-  $releases = array();
-  $alternatives = array();
-
-  $info = _install_get_version_info($version);
-
-  // This code assumes there is a first alpha available as "alpha1". For
-  // Drupal 8.0.0 that isn't the case. In addition the semantic versioning
-  // wasn't introduced before "alpha14". However, we have already gotten to
-  // "beta1" so we are ignoring this for now.
-
-  // The fallback detection is relaxed - removing version duplicates at the end.
-
-  // Check if the version is a regular stable release (no 'rc', 'beta', 'alpha',
-  // 'dev', etc.)
-  if (!isset($info['extra_text'])) {
-    // First version alternative: the current version.
-    $alternatives[] = $version;
-
-    // Patch-level: Previous and zero patch level (e.g., 8.2.4 falls back to
-    // 8.2.3 and 8.2.0).
-    if ($info['patch'] > 0) {
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.' . ($info['patch'] - 1);
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0';
-    }
-    // Zero patch: First release candidate (e.g., 8.0.0 falls back to
-    // 8.0.0-rc1).
-    else {
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-rc1';
-    }
-    // Point-releases: Previous and zero minor release (e.g., 8.2.x falls back
-    // to 8.1.0 and 8.0.0).
-    if ($info['minor'] > 0) {
-      $alternatives[] = $info['major'] . '.' . ($info['minor'] - 1) . '.0';
-      $alternatives[] = $info['major'] . '.0.0';
-    }
-  }
-  else {
-    // Below we assume that for all dev, alpha, beta or rc releases the patch
-    // level is 0.
-
-    $release_levels = array('rc', 'beta', 'alpha');
-
-    if ($info['extra_text'] == 'dev') {
-      // Dev release: Any unstable release (e.g., 8.2.0-dev falls back to
-      // 8.2.0-rc1, 8.2.0-beta1 and 8.2.0-alpha1).
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-rc1';
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-beta1';
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-alpha1';
-    }
-    elseif (in_array($info['extra_text'], $release_levels)) {
-      // All other unstable release always includes the current version.
-      $alternatives[] = $version;
-      // Alpha release: Previous alpha release (e.g. 8.0.0-alpha2 falls back to
-      // 8.0.0-alpha1).
-      // Beta release: Previous beta release and first alpha release (e.g.
-      // 8.0.0-beta2 falls back to 8.0.0-beta1 and 8.0.0-alpha1).
-      // Release candidate: Previous release candidate and the first beta
-      // release (e.g. 8.0.0-rc2 falls back to 8.0.0-rc1 and 8.0.0-beta1).
-      $release_level_key = array_search($info['extra_text'], $release_levels);
-      if ($info['extra_number'] > 1) {
-        $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-' . $info['extra_text'] . ($info['extra_number'] - 1);
-      }
-      if ($info['extra_text'] != 'alpha') {
-        $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0-' . $release_levels[$release_level_key + 1] . '1';
-      }
-    }
-    else {
-      $alternatives[] = $info['major'] . '.' . $info['minor'] . '.0';
-    }
-    // All unstable releases except the zero release: The previous minor release
-    // and the zero release.
-    if ($info['minor'] > 0) {
-      $alternatives[] = $info['major'] . '.' . ($info['minor'] - 1) . '.0';
-      $alternatives[] = $info['major'] . '.0.0';
-    }
-  }
-
-  $alternatives = array_unique($alternatives);
-  foreach ($alternatives as $alternative) {
-    list($core) = explode('.', $alternative);
-    $releases[] = array(
-      'core' => $core . '.x',
-      'version' => $alternative,
-    );
-  }
-
-  // All releases may fall back to the previous major release (e.g., 8.1.0
-  // may fall back to 7.0). This will probably only be used for early dev
-  // releases or languages with an inactive translation team.
-  if ($info['major'] == 8) {
-    $releases[] = array(
-      'core' => '7.x',
-      'version' => '7.0',
-    );
-  }
-  else {
-    $prev_major = $info['major'] - 1;
-    $releases[] = array(
-      'core' => $prev_major . '.x',
-      'version' => $prev_major . '.0.0',
-    );
-  }
-
-  return $releases;
 }
 
 /**
@@ -1590,6 +1472,10 @@ function install_bootstrap_full() {
  *   The batch definition.
  */
 function install_profile_modules(&$install_state) {
+  // We need to manually trigger the installation of core-provided entity types,
+  // as those will not be handled by the module installer.
+  install_core_entity_type_definitions();
+
   $modules = \Drupal::state()->get('install_profile_modules') ?: array();
   $files = system_rebuild_module_data();
   \Drupal::state()->delete('install_profile_modules');
@@ -1627,6 +1513,18 @@ function install_profile_modules(&$install_state) {
     'error_message' => t('The installation has encountered an error.'),
   );
   return $batch;
+}
+
+/**
+ * Installs entity type definitions provided by core.
+ */
+function install_core_entity_type_definitions() {
+  $update_manager = \Drupal::entityDefinitionUpdateManager();
+  foreach (\Drupal::entityManager()->getDefinitions() as $entity_type) {
+    if ($entity_type->getProvider() == 'core') {
+      $update_manager->installEntityType($entity_type);
+    }
+  }
 }
 
 /**
@@ -1912,7 +1810,6 @@ function install_check_translations($langcode, $server_pattern) {
   $files_directory =  $site_path . '/files';
   $translations_directory = $site_path . '/files/translations';
   $translations_directory_exists = FALSE;
-  $translation_available = FALSE;
   $online = FALSE;
 
   // First attempt to create or make writable the files directory.
@@ -1932,19 +1829,16 @@ function install_check_translations($langcode, $server_pattern) {
     return;
   }
 
-  // Build URLs for the translation file and the translation server.
-  $releases = install_get_localization_release();
-  $translation_urls = array();
-  foreach ($releases as $release) {
-    $variables = array(
-      '%project' => 'drupal',
-      '%version' => $release['version'],
-      '%core' => $release['core'],
-      '%language' => $langcode,
-    );
-    $translation_urls[] = strtr($server_pattern, $variables);
-  }
-  $elements = parse_url(reset($translation_urls));
+  // Build URL for the translation file and the translation server.
+  $variables = array(
+    '%project' => 'drupal',
+    '%version' => \Drupal::VERSION,
+    '%core' => \Drupal::CORE_COMPATIBILITY,
+    '%language' => $langcode,
+  );
+  $translation_url = strtr($server_pattern, $variables);
+
+  $elements = parse_url($translation_url);
   $server_url = $elements['scheme'] . '://' . $elements['host'];
 
   // Build the language name for display.
@@ -1954,11 +1848,8 @@ function install_check_translations($langcode, $server_pattern) {
   // Check if any of the desired translation files are available or if the
   // translation server can be reached. In other words, check if we are online
   // and have an internet connection.
-  foreach ($translation_urls as $translation_url) {
-    if ($translation_available = install_check_localization_server($translation_url)) {
-      $online = TRUE;
-      break;
-    }
+  if ($translation_available = install_check_localization_server($translation_url)) {
+    $online = TRUE;
   }
   if (!$translation_available) {
     if (install_check_localization_server($server_url)) {
@@ -1972,7 +1863,7 @@ function install_check_translations($langcode, $server_pattern) {
       'title'       => t('Translations directory'),
       'value'       => t('The translations directory does not exist.'),
       'severity'    => REQUIREMENT_ERROR,
-      'description' => t('The installer requires that you create a translations directory as part of the installation process. Create the directory %translations_directory . More details about installing Drupal are available in <a href="@install_txt">INSTALL.txt</a>.', array('%translations_directory' => $translations_directory, '@install_txt' => base_path() . 'core/INSTALL.txt')),
+      'description' => t('The installer requires that you create a translations directory as part of the installation process. Create the directory %translations_directory . More details about installing Drupal are available in <a href=":install_txt">INSTALL.txt</a>.', array('%translations_directory' => $translations_directory, ':install_txt' => base_path() . 'core/INSTALL.txt')),
     );
   }
   else {
@@ -1986,7 +1877,7 @@ function install_check_translations($langcode, $server_pattern) {
         'title'       => t('Translations directory'),
         'value'       => t('The translations directory is not readable.'),
         'severity'    => REQUIREMENT_ERROR,
-        'description' => t('The installer requires read permissions to %translations_directory at all times. If you are unsure how to grant file permissions, consult the <a href="@handbook_url">online handbook</a>.', array('%translations_directory' => $translations_directory, '@handbook_url' => 'https://www.drupal.org/server-permissions')),
+        'description' => t('The installer requires read permissions to %translations_directory at all times. The <a href=":handbook_url">webhosting issues</a> documentation section offers help on this and other topics.', array('%translations_directory' => $translations_directory, ':handbook_url' => 'https://www.drupal.org/server-permissions')),
       );
     }
     // If translations directory is not writable, throw an error.
@@ -1995,7 +1886,7 @@ function install_check_translations($langcode, $server_pattern) {
         'title'       => t('Translations directory'),
         'value'       => t('The translations directory is not writable.'),
         'severity'    => REQUIREMENT_ERROR,
-        'description' => t('The installer requires write permissions to %translations_directory during the installation process. If you are unsure how to grant file permissions, consult the <a href="@handbook_url">online handbook</a>.', array('%translations_directory' => $translations_directory, '@handbook_url' => 'https://www.drupal.org/server-permissions')),
+        'description' => t('The installer requires write permissions to %translations_directory during the installation process. The <a href=":handbook_url">webhosting issues</a> documentation section offers help on this and other topics.', array('%translations_directory' => $translations_directory, ':handbook_url' => 'https://www.drupal.org/server-permissions')),
       );
     }
     else {
@@ -2012,7 +1903,7 @@ function install_check_translations($langcode, $server_pattern) {
       'title'       => t('Internet'),
       'value'       => t('The translation server is offline.'),
       'severity'    => REQUIREMENT_ERROR,
-      'description' => t('The installer requires to contact the translation server to download a translation file. Check your internet connection and verify that your website can reach the translation server at <a href="!server_url">!server_url</a>.', array('!server_url' => $server_url)),
+      'description' => t('The installer requires to contact the translation server to download a translation file. Check your internet connection and verify that your website can reach the translation server at <a href=":server_url">@server_url</a>.', array(':server_url' => $server_url, '@server_url' => $server_url)),
     );
   }
   else {
@@ -2027,7 +1918,7 @@ function install_check_translations($langcode, $server_pattern) {
         'title'       => t('Translation'),
         'value'       => t('The %language translation is not available.', array('%language' => $language)),
         'severity'    => REQUIREMENT_ERROR,
-        'description' => t('The %language translation file is not available at the translation server. <a href="!url">Choose a different language</a> or select English and translate your website later.', array('%language' => $language, '!url' => check_url($_SERVER['SCRIPT_NAME']))),
+        'description' => t('The %language translation file is not available at the translation server. <a href=":url">Choose a different language</a> or select English and translate your website later.', array('%language' => $language, ':url' => $_SERVER['SCRIPT_NAME'])),
       );
     }
     else {
@@ -2046,7 +1937,7 @@ function install_check_translations($langcode, $server_pattern) {
         'title'       => t('Translation'),
         'value'       => t('The %language translation could not be downloaded.', array('%language' => $language)),
         'severity'    => REQUIREMENT_ERROR,
-        'description' => t('The %language translation file could not be downloaded. <a href="!url">Choose a different language</a> or select English and translate your website later.', array('%language' => $language, '!url' => check_url($_SERVER['SCRIPT_NAME']))),
+        'description' => t('The %language translation file could not be downloaded. <a href=":url">Choose a different language</a> or select English and translate your website later.', array('%language' => $language, ':url' => $_SERVER['SCRIPT_NAME'])),
       );
     }
   }
@@ -2076,13 +1967,6 @@ function install_check_requirements($install_state) {
     'title_default' => t('Default settings file'),
     'description_default' => t('The default settings file does not exist.'),
     'title' => t('Settings file'),
-  );
-  $default_files['services.yml'] = array(
-    'file' => 'services.yml',
-    'file_default' => 'default.services.yml',
-    'title_default' => t('Default services file'),
-    'description_default' => t('The default services file does not exist.'),
-    'title' => t('Services file'),
   );
 
   foreach ($default_files as $default_file_info) {
@@ -2168,11 +2052,11 @@ function install_check_requirements($install_state) {
         'title' => $default_file_info['title'],
         'value' => t('The %file does not exist.', array('%file' => $default_file_info['title'])),
         'severity' => REQUIREMENT_ERROR,
-        'description' => t('The @drupal installer requires that you create a %file as part of the installation process. Copy the %default_file file to %file. More details about installing Drupal are available in <a href="@install_txt">INSTALL.txt</a>.', array(
+        'description' => t('The @drupal installer requires that you create a %file as part of the installation process. Copy the %default_file file to %file. More details about installing Drupal are available in <a href=":install_txt">INSTALL.txt</a>.', array(
             '@drupal' => drupal_install_profile_distribution_name(),
             '%file' => $file,
             '%default_file' => $default_file,
-            '@install_txt' => base_path() . 'core/INSTALL.txt'
+            ':install_txt' => base_path() . 'core/INSTALL.txt'
           )),
       );
     }
@@ -2187,10 +2071,10 @@ function install_check_requirements($install_state) {
           'title' => $default_file_info['title'],
           'value' => t('The %file is not readable.', array('%file' => $default_file_info['title'])),
           'severity' => REQUIREMENT_ERROR,
-          'description' => t('@drupal requires read permissions to %file at all times. If you are unsure how to grant file permissions, consult the <a href="@handbook_url">online handbook</a>.', array(
+          'description' => t('@drupal requires read permissions to %file at all times. The <a href=":handbook_url">webhosting issues</a> documentation section offers help on this and other topics.', array(
               '@drupal' => drupal_install_profile_distribution_name(),
               '%file' => $file,
-              '@handbook_url' => 'https://www.drupal.org/server-permissions'
+              ':handbook_url' => 'https://www.drupal.org/server-permissions'
             )),
         );
       }
@@ -2200,10 +2084,10 @@ function install_check_requirements($install_state) {
           'title' => $default_file_info['title'],
           'value' => t('The %file is not writable.', array('%file' => $default_file_info['title'])),
           'severity' => REQUIREMENT_ERROR,
-          'description' => t('The @drupal installer requires write permissions to %file during the installation process. If you are unsure how to grant file permissions, consult the <a href="@handbook_url">online handbook</a>.', array(
+          'description' => t('The @drupal installer requires write permissions to %file during the installation process. The <a href=":handbook_url">webhosting issues</a> documentation section offers help on this and other topics.', array(
               '@drupal' => drupal_install_profile_distribution_name(),
               '%file' => $file,
-              '@handbook_url' => 'https://www.drupal.org/server-permissions'
+              ':handbook_url' => 'https://www.drupal.org/server-permissions'
             )),
         );
       }
@@ -2218,12 +2102,12 @@ function install_check_requirements($install_state) {
           'title' => $default_file_info['title'],
           'value' => t('The @file is owned by the web server.', array('@file' => $default_file_info['title'])),
           'severity' => REQUIREMENT_ERROR,
-          'description' => t('The @drupal installer failed to create a %file file with proper file ownership. Log on to your web server, remove the existing %file file, and create a new one by copying the %default_file file to %file. More details about installing Drupal are available in <a href="@install_txt">INSTALL.txt</a>. If you have problems with the file permissions on your server, consult the <a href="@handbook_url">online handbook</a>.', array(
+          'description' => t('The @drupal installer failed to create a %file file with proper file ownership. Log on to your web server, remove the existing %file file, and create a new one by copying the %default_file file to %file. More details about installing Drupal are available in <a href=":install_txt">INSTALL.txt</a>. The <a href=":handbook_url">webhosting issues</a> documentation section offers help on this and other topics.', array(
               '@drupal' => drupal_install_profile_distribution_name(),
               '%file' => $file,
               '%default_file' => $default_file,
-              '@install_txt' => base_path() . 'core/INSTALL.txt',
-              '@handbook_url' => 'https://www.drupal.org/server-permissions'
+              ':install_txt' => base_path() . 'core/INSTALL.txt',
+              ':handbook_url' => 'https://www.drupal.org/server-permissions'
             )),
         );
       }
@@ -2263,11 +2147,11 @@ function install_display_requirements($install_state, $requirements) {
       $build['report']['#requirements'] = $requirements;
       if ($severity == REQUIREMENT_WARNING) {
         $build['#title'] = t('Requirements review');
-        $build['#suffix'] = t('Check the messages and <a href="!retry">retry</a>, or you may choose to <a href="!cont">continue anyway</a>.', array('!retry' => check_url(drupal_requirements_url(REQUIREMENT_ERROR)), '!cont' => check_url(drupal_requirements_url($severity))));
+        $build['#suffix'] = t('Check the messages and <a href=":retry">retry</a>, or you may choose to <a href=":cont">continue anyway</a>.', array(':retry' => drupal_requirements_url(REQUIREMENT_ERROR), ':cont' => drupal_requirements_url($severity)));
       }
       else {
         $build['#title'] = t('Requirements problem');
-        $build['#suffix'] = t('Check the messages and <a href="!url">try again</a>.', array('!url' => check_url(drupal_requirements_url($severity))));
+        $build['#suffix'] = t('Check the messages and <a href=":url">try again</a>.', array(':url' => drupal_requirements_url($severity)));
       }
       return $build;
     }

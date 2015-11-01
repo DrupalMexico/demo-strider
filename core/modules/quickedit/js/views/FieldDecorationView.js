@@ -5,7 +5,7 @@
 
 (function ($, Backbone, Drupal) {
 
-  "use strict";
+  'use strict';
 
   Drupal.quickedit.FieldDecorationView = Backbone.View.extend(/** @lends Drupal.quickedit.FieldDecorationView# */{
 
@@ -56,6 +56,7 @@
      * Determines the actions to take given a change of state.
      *
      * @param {Drupal.quickedit.FieldModel} model
+     *   The `FieldModel` model.
      * @param {string} state
      *   The state of the associated field. One of
      *   {@link Drupal.quickedit.FieldModel.states}.
@@ -128,6 +129,7 @@
      * Starts hover; transitions to 'highlight' state.
      *
      * @param {jQuery.Event} event
+     *   The mouse event.
      */
     onMouseEnter: function (event) {
       var that = this;
@@ -139,6 +141,7 @@
      * Stops hover; transitions to 'candidate' state.
      *
      * @param {jQuery.Event} event
+     *   The mouse event.
      */
     onMouseLeave: function (event) {
       var that = this;
@@ -150,6 +153,7 @@
      * Transition to 'activating' stage.
      *
      * @param {jQuery.Event} event
+     *   The click event.
      */
     onClick: function (event) {
       this.model.set('state', 'activating');
@@ -233,7 +237,7 @@
       // width and *then* add 5px padding, hence ensuring the padding is added
       // "on the outside".
       // 1) Freeze the width (if it's not already set); don't use animations.
-      if (this.$el[0].style.width === "") {
+      if (this.$el[0].style.width === '') {
         this._widthAttributeIsEmpty = true;
         this.$el
           .addClass('quickedit-animate-disable-width')
@@ -313,8 +317,10 @@
      * subtraction.
      *
      * @param {jQuery} $e
+     *   The element to get position properties from.
      *
      * @return {object}
+     *   An object containing css values for the needed properties.
      */
     _getPositionProperties: function ($e) {
       var p;
@@ -340,6 +346,7 @@
      *   The value for a CSS position declaration.
      *
      * @return {string}
+     *   A CSS value that is valid for `position`.
      */
     _replaceBlankPosition: function (pos) {
       if (pos === 'auto' || !pos) {

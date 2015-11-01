@@ -10,6 +10,13 @@ migrate_plugin:
 migrate_destination:
   type: migrate_plugin
   label: 'Destination'
+  mapping:
+    overwrite_properties:
+      type: sequence
+      label: 'Properties to overwrite'
+      sequence:
+        type: string
+        label: 'Property'
 
 migrate_source:
   type: migrate_plugin
@@ -27,7 +34,3 @@ migrate_source_sql:
     target:
       type: string
       label: 'The migration database target'
-
-migrate_load:
-  type: migrate_plugin
-  label: 'Load'

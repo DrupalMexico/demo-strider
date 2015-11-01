@@ -9,12 +9,17 @@
 
 (function ($, Drupal) {
 
-  "use strict";
+  'use strict';
 
   /**
-   * Attach behaviors to managed file element upload fields.
+   * Attach behaviors to the file fields passed in the settings.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches validation for file extensions.
+   * @prop {Drupal~behaviorDetach} detach
+   *   Detaches validation for file extensions.
    */
   Drupal.behaviors.fileValidateAutoAttach = {
     attach: function (context, settings) {
@@ -50,9 +55,14 @@
   };
 
   /**
-   * Attach behaviors to managed file element upload fields.
+   * Attach behaviors to file element auto upload.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches triggers for the upload button.
+   * @prop {Drupal~behaviorDetach} detach
+   *   Detaches auto file upload trigger.
    */
   Drupal.behaviors.fileAutoUpload = {
     attach: function (context) {
@@ -69,6 +79,11 @@
    * Attach behaviors to the file upload and remove buttons.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches form submit events.
+   * @prop {Drupal~behaviorDetach} detach
+   *   Detaches form submit events.
    */
   Drupal.behaviors.fileButtons = {
     attach: function (context) {
@@ -84,9 +99,14 @@
   };
 
   /**
-   * Attach behaviors to links within managed file elements.
+   * Attach behaviors to links within managed file elements for preview windows.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches triggers.
+   * @prop {Drupal~behaviorDetach} detach
+   *   Detaches triggers.
    */
   Drupal.behaviors.filePreviewLinks = {
     attach: function (context) {
@@ -110,6 +130,7 @@
      * @name Drupal.file.validateExtension
      *
      * @param {jQuery.Event} event
+     *   The event triggered. For example `change.fileValidate`.
      */
     validateExtension: function (event) {
       event.preventDefault();
@@ -121,7 +142,7 @@
       if (extensionPattern.length > 1 && this.value.length > 0) {
         var acceptableMatch = new RegExp('\\.(' + extensionPattern + ')$', 'gi');
         if (!acceptableMatch.test(this.value)) {
-          var error = Drupal.t("The selected file %filename cannot be uploaded. Only files with the following extensions are allowed: %extensions.", {
+          var error = Drupal.t('The selected file %filename cannot be uploaded. Only files with the following extensions are allowed: %extensions.', {
             // According to the specifications of HTML5, a file upload control
             // should not reveal the real local path to the file that a user
             // has selected. Some web browsers implement this restriction by
@@ -146,6 +167,7 @@
      * @name Drupal.file.triggerUploadButton
      *
      * @param {jQuery.Event} event
+     *   The event triggered. For example `change.autoFileUpload`.
      */
     triggerUploadButton: function (event) {
       $(event.target).closest('.js-form-managed-file').find('.js-form-submit').trigger('mousedown');
@@ -157,6 +179,7 @@
      * @name Drupal.file.disableFields
      *
      * @param {jQuery.Event} event
+     *   The event triggered, most likely a `mousedown` event.
      */
     disableFields: function (event) {
       var $clickedButton = $(this).findOnce('ajax');
@@ -194,6 +217,7 @@
      * @name Drupal.file.progressBar
      *
      * @param {jQuery.Event} event
+     *   The event triggered, most likely a `mousedown` event.
      */
     progressBar: function (event) {
       var $clickedButton = $(this);
@@ -221,6 +245,7 @@
      * @name Drupal.file.openInNewWindow
      *
      * @param {jQuery.Event} event
+     *   The event triggered, most likely a `click` event.
      */
     openInNewWindow: function (event) {
       event.preventDefault();

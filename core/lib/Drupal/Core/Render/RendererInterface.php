@@ -22,13 +22,18 @@ interface RendererInterface {
    * - system internals that are responsible for rendering the final HTML
    * - render arrays for non-HTML responses, such as feeds
    *
+   * (Cannot be executed within another render context.)
+   *
    * @param array $elements
    *   The structured array describing the data to be rendered.
    *
-   * @return string
+   * @return \Drupal\Component\Render\MarkupInterface
    *   The rendered HTML.
    *
    * @see ::render()
+   *
+   * @throws \LogicException
+   *   When called from inside another renderRoot() call.
    */
   public function renderRoot(&$elements);
 
@@ -37,7 +42,7 @@ interface RendererInterface {
    *
    * Calls ::render() in such a way that placeholders are replaced.
    *
-   * Useful for e.g. rendering the values of tokens or e-mails, which need a
+   * Useful for e.g. rendering the values of tokens or emails, which need a
    * render array being turned into a string, but don't need any of the
    * bubbleable metadata (the attached assets the cache tags).
    *
@@ -45,13 +50,15 @@ interface RendererInterface {
    * ::renderRoot() call, but that is generally highly problematic (and hence an
    * exception is thrown when a ::renderRoot() call happens within another
    * ::renderRoot() call). However, in this case, we only care about the output,
-   * not about the bubbling. Hence this uses a separate render stack, to not
+   * not about the bubbling. Hence this uses a separate render context, to not
    * affect the parent ::renderRoot() call.
+   *
+   * (Can be executed within another render context: it runs in isolation.)
    *
    * @param array $elements
    *   The structured array describing the data to be rendered.
    *
-   * @return string
+   * @return \Drupal\Component\Render\MarkupInterface
    *   The rendered HTML.
    *
    * @see ::renderRoot()
@@ -88,8 +95,8 @@ interface RendererInterface {
    *   or configuration that can affect that rendering changes.
    * - Placeholders, with associated self-contained placeholder render arrays,
    *   for executing code to handle dynamic requirements that cannot be cached.
-   * A stack of \Drupal\Core\Render\BubbleableMetadata objects can be used to
-   * perform this bubbling.
+   * A render context (\Drupal\Core\Render\RenderContext) can be used to perform
+   * bubbling; it is a stack of \Drupal\Core\Render\BubbleableMetadata objects.
    *
    * Additionally, whether retrieving from cache or not, it is important to
    * know all of the assets (CSS and JavaScript) required by the rendered HTML,
@@ -103,9 +110,9 @@ interface RendererInterface {
    *   - If this element has already been printed (#printed = TRUE) or the user
    *     does not have access to it (#access = FALSE), then an empty string is
    *     returned.
-   *   - If no stack data structure has been created yet, it is done now. Next,
+   *   - If no render context is set yet, an exception is thrown. Otherwise,
    *     an empty \Drupal\Core\Render\BubbleableMetadata is pushed onto the
-   *     stack.
+   *     render context.
    *   - If this element has #cache defined then the cached markup for this
    *     element will be returned if it exists in Renderer::render()'s cache. To
    *     use Renderer::render() caching, set the element's #cache property to an
@@ -141,7 +148,7 @@ interface RendererInterface {
    *     $pre_bubbling_cid.
    *   - If this element has #type defined and the default attributes for this
    *     element have not already been merged in (#defaults_loaded = TRUE) then
-   *     the defaults for this type of element, defined in hook_element_info(),
+   *     the defaults for this type of element, defined by an element plugin,
    *     are merged into the array. #defaults_loaded is set by functions that
    *     process render arrays and call the element info service before passing
    *     the array to Renderer::render(), such as form_builder() in the Form
@@ -202,7 +209,7 @@ interface RendererInterface {
    *     drupal_process_states().
    *   - If this element has #attached defined then any required libraries,
    *     JavaScript, CSS, or other custom data are added to the current page by
-   *     drupal_process_attached().
+   *     \Drupal\Core\Render\AttachmentsResponseProcessorInterface::processAttachments().
    *   - If this element has an array of #theme_wrappers defined and
    *     #render_children is not set, #children is then re-rendered by passing
    *     the element in its current state to ThemeManagerInterface::render()
@@ -295,25 +302,67 @@ interface RendererInterface {
    *   (Internal use only.) Whether this is a recursive call or not. See
    *   ::renderRoot().
    *
-   * @return string
+   * @return \Drupal\Component\Render\MarkupInterface
    *   The rendered HTML.
    *
    * @throws \LogicException
-   *   If a root call to ::render() does not result in an empty stack, this
-   *   indicates an erroneous ::render() root call (a root call within a
-   *   root call, which makes no sense). Therefore, a logic exception is thrown.
+   *   When called outside of a render context. (i.e. outside of a renderRoot(),
+   *   renderPlain() or executeInRenderContext() call.)
    * @throws \Exception
-   *   If a #pre_render callback throws an exception, it is caught to reset the
-   *   stack used for bubbling rendering metadata, and then the exception is re-
-   *   thrown.
+   *   If a #pre_render callback throws an exception, it is caught to mark the
+   *   renderer as no longer being in a root render call, if any. Then the
+   *   exception is rethrown.
    *
    * @see \Drupal\Core\Render\ElementInfoManagerInterface::getInfo()
    * @see \Drupal\Core\Theme\ThemeManagerInterface::render()
    * @see drupal_process_states()
-   * @see drupal_process_attached()
+   * @see \Drupal\Core\Render\AttachmentsResponseProcessorInterface::processAttachments()
    * @see ::renderRoot()
    */
   public function render(&$elements, $is_root_call = FALSE);
+
+  /**
+   * Checks whether a render context is active.
+   *
+   * This is useful only in very specific situations to determine whether the
+   * system is already capable of collecting bubbleable metadata. Normally it
+   * should not be necessary to be concerned about this.
+   *
+   * @return bool
+   *   TRUE if the renderer has a render context active, FALSE otherwise.
+   */
+  public function hasRenderContext();
+
+  /**
+   * Executes a callable within a render context.
+   *
+   * Only for very advanced use cases. Prefer using ::renderRoot() and
+   * ::renderPlain() instead.
+   *
+   * All rendering must happen within a render context. Within a render context,
+   * all bubbleable metadata is bubbled and hence tracked. Outside of a render
+   * context, it would be lost. This could lead to missing assets, incorrect
+   * cache variations (and thus security issues), insufficient cache
+   * invalidations, and so on.
+   *
+   * Any and all rendering must therefore happen within a render context, and it
+   * is this method that provides that.
+   *
+   * @see \Drupal\Core\Render\BubbleableMetadata
+   *
+   * @param \Drupal\Core\Render\RenderContext $context
+   *   The render context to execute the callable within.
+   * @param callable $callable
+   *   The callable to execute.
+   * @return mixed
+   *   The callable's return value.
+   *
+   * @see \Drupal\Core\Render\RenderContext
+   *
+   * @throws \LogicException
+   *   In case bubbling has failed, can only happen in case of broken code.
+   */
+  public function executeInRenderContext(RenderContext $context, callable $callable);
 
   /**
    * Merges the bubbleable rendering metadata o/t 2nd render array with the 1st.

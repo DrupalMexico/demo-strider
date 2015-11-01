@@ -7,6 +7,7 @@
 
 namespace Drupal\Core;
 
+use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -16,7 +17,7 @@ use Symfony\Component\HttpFoundation\Request;
  * This interface extends Symfony's KernelInterface and adds methods for
  * responding to modules being enabled or disabled during its lifetime.
  */
-interface DrupalKernelInterface extends HttpKernelInterface {
+interface DrupalKernelInterface extends HttpKernelInterface, ContainerAwareInterface {
 
   /**
    * Boots the current kernel.
@@ -58,6 +59,16 @@ interface DrupalKernelInterface extends HttpKernelInterface {
   public function getContainer();
 
   /**
+   * Returns the cached container definition - if any.
+   *
+   * This also allows inspecting a built container for debugging purposes.
+   *
+   * @return array|NULL
+   *   The cached container definition or NULL if not found in cache.
+   */
+  public function getCachedContainerDefinition();
+
+  /**
    * Set the current site path.
    *
    * @param string $path
@@ -95,6 +106,18 @@ interface DrupalKernelInterface extends HttpKernelInterface {
    *   List of module filenames, keyed by module name.
    */
   public function updateModules(array $module_list, array $module_filenames = array());
+
+  /**
+   * Force a container rebuild.
+   *
+   * @return \Symfony\Component\DependencyInjection\ContainerInterface
+   */
+  public function rebuildContainer();
+
+  /**
+   * Invalidate the service container for the next request.
+   */
+  public function invalidateContainer();
 
   /**
    * Prepare the kernel for handling a request without handling the request.

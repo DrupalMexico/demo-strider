@@ -108,7 +108,6 @@ Database update system
 Entity system
 - Wolfgang Ziegler 'fago' https://www.drupal.org/u/fago
 - Nathaniel Catchpole 'catch' https://www.drupal.org/u/catch
-- Franz Heinzmann 'Frando' https://www.drupal.org/u/frando
 - Sascha Grossenbacher 'Berdir' https://www.drupal.org/u/berdir
 
 Extension system
@@ -128,7 +127,6 @@ Form system
 - Wolfgang Ziegler 'fago' https://www.drupal.org/u/fago
 - Daniel F. Kudwien 'sun' https://www.drupal.org/u/sun
 - Tim Plunkett 'tim.plunkett' https://www.drupal.org/u/tim.plunkett
-- Franz Heinzmann 'Frando' https://www.drupal.org/u/frando
 
 Image system
 - Claudiu Cristea 'claudiu.cristea' https://www.drupal.org/u/claudiu.cristea
@@ -153,7 +151,8 @@ Mail system
 Markup
 - Daniel F. Kudwien 'sun' https://www.drupal.org/u/sun
 
-Migrate
+Migration system
+- Adam Globus-Hoenich 'phenaproxima' https://www.drupal.org/u/phenaproxima
 - Ben Dougherty 'benjy' https://www.drupal.org/u/benjy
 - Michael Anello 'ultimike' https://www.drupal.org/u/ultimike
 - Mike Ryan 'mikeryan' https://www.drupal.org/u/mikeryan
@@ -182,7 +181,6 @@ Queue system
 Render system
 - Moshe Weitzman 'moshe weitzman' https://www.drupal.org/u/moshe-weitzman
 - Alex Bronstein 'effulgentsia' https://www.drupal.org/u/effulgentsia
-- Franz Heinzmann 'Frando' https://www.drupal.org/u/frando
 
 Request processing system
 - Larry Garfield 'Crell' https://www.drupal.org/u/crell
@@ -193,11 +191,10 @@ Routing system
 
 Theme system
 - Alex Bronstein 'effulgentsia' https://www.drupal.org/u/effulgentsia
-- John Albin Wilkins 'JohnAlbin' https://www.drupal.org/u/johnalbin
-- Jen Lampton 'jenlampton' https://www.drupal.org/u/jenlampton
 - Scott Reeves 'Cottser' https://www.drupal.org/u/cottser
 - Fabian Franz 'Fabianx' https://www.drupal.org/u/fabianx
 - Joël Pittet 'joelpittet' https://www.drupal.org/u/joelpittet
+- Lauri Eskola 'lauriii' https://www.drupal.org/u/lauriii
 
 Token system
 - Dave Reid 'davereid' https://www.drupal.org/u/davereid
@@ -210,6 +207,9 @@ Transliteration system
 - Damien Tournoud 'DamZ' https://www.drupal.org/u/damz
 - Daniel F. Kudwien 'sun' https://www.drupal.org/u/sun
 - Jennifer Hodgdon 'jhodgdon' https://www.drupal.org/u/jhodgdon
+
+Typed data system
+- Wolfgang Ziegler 'fago' https://www.drupal.org/u/fago
 
 Topic maintainers
 -----------------
@@ -256,6 +256,9 @@ Action module
 Aggregator module
 - Paris Liakos 'ParisLiakos' https://www.drupal.org/u/parisliakos
 
+Automated Cron module
+- ?
+
 Ban module
 - ?
 
@@ -298,7 +301,8 @@ Configuration Translation module
 
 Contact module
 - Lee Rowlands 'larowlan' https://www.drupal.org/u/larowlan
-- Tim Eisenhuth 'tim-e' https://www.drupal.org/u/tim-e
+- Jibran Ijaz 'jibran' https://www.drupal.org/u/jibran
+- Andrey Postnikov 'andypost' https://www.drupal.org/u/andypost
 
 Content Translation module
 - Francesco Placella 'plach' https://www.drupal.org/u/plach
@@ -312,15 +316,15 @@ Database Logging module
 DateTime module
 - Matthew Donadio 'mpdonadio' https://www.drupal.org/u/mpdonadio
 
+Dynamic Page Cache module
+- Fabian Franz 'Fabianx' https://www.drupal.org/u/fabianx
+- Wim Leers 'Wim Leers' https://www.drupal.org/u/wim-leers
+
 Email module
 - Nils Destoop 'zuuperman' https://www.drupal.org/u/zuuperman
 
 Editor module
 - Wim Leers 'Wim Leers' https://www.drupal.org/u/wim-leers
-
-Entity Reference module
-- Amitai Burstein 'Amitaibu' https://www.drupal.org/u/amitaibu
-- Andrei Mateescu 'amateescu' https://www.drupal.org/u/amateescu
 
 Field UI module
 - Yves Chedemois 'yched' https://www.drupal.org/u/yched
@@ -511,13 +515,24 @@ Web services
 
 Provisional membership: None at this time.
 
-Core mentoring leads
+
+Core mentoring coordinators
 ---------------------
 
-The Drupal Core mentoring leads inspire, enable, and encourage new core
-contributors. They also work on the core tools, process, and community to make
-it easier for new contributors to get involved. The mentoring leads are:
+The Drupal Core mentors inspire, enable, and encourage new core contributors.
+See https://www.drupal.org/core-mentoring for more information about mentoring.
 
+Mentoring coordinators recruit and coach other mentors. They work on contributor
+tools, documentation, and processes to make it easier for new contributors to
+get involved. They organize communications and logistics, and actively
+participate in mentoring.
+
+- Lucas Hedding 'heddn' https://www.drupal.org/u/heddn
+- Valery Lourie 'valthebald' https://www.drupal.org/u/valthebald
+- Alina Mackenzie 'alimac' https://www.drupal.org/u/alimac
+- Chris McCaferty 'cilefen' https://www.drupal.org/u/cilefen
 - Jess Myrbo 'xjm' https://www.drupal.org/u/xjm
-- Cathy Theys 'YesCT' https://www.drupal.org/u/yesct
 - Andrea Soper 'ZenDoodles' https://www.drupal.org/u/zendoodles
+- Cathy Theys 'YesCT' https://www.drupal.org/u/yesct
+
+Provisional membership: None at this time.

@@ -8,6 +8,7 @@
 namespace Drupal\file\Tests;
 
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\file\Entity\File;
 
 /**
  * Tests the display of file fields in node and views.
@@ -49,6 +50,12 @@ class FileFieldDisplayTest extends FileFieldTestBase {
     }
 
     $test_file = $this->getTestFile('text');
+    simpletest_generate_file('escaped-&-text', 64, 10, 'text');
+    $test_file = File::create([
+      'uri' => 'public://escaped-&-text.txt',
+      'name' => 'escaped-&-text',
+      'filesize' => filesize('public://escaped-&-text.txt'),
+    ]);
 
     // Create a new node with the uploaded file.
     $nid = $this->uploadNodeFile($test_file, $field_name, $type_name);
@@ -57,7 +64,7 @@ class FileFieldDisplayTest extends FileFieldTestBase {
     $node_storage = $this->container->get('entity.manager')->getStorage('node');
     $node_storage->resetCache(array($nid));
     $node = $node_storage->load($nid);
-    $node_file = file_load($node->{$field_name}->target_id);
+    $node_file = File::load($node->{$field_name}->target_id);
     $file_link = array(
       '#theme' => 'file_link',
       '#file' => $node_file,
@@ -79,6 +86,9 @@ class FileFieldDisplayTest extends FileFieldTestBase {
     );
     $this->drupalPostForm('node/' . $nid . '/edit', $edit, t('Save and keep published'));
     $this->assertText($description);
+
+    // Ensure the filename in the link's title attribute is escaped.
+    $this->assertRaw('title="escaped-&amp;-text.txt"');
 
     // Test that fields appear as expected after during the preview.
     // Add a second file.

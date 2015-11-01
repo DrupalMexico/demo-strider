@@ -12,9 +12,8 @@ use Behat\Mink\Element\Element;
 use Behat\Mink\Exception\Exception;
 use Behat\Mink\Mink;
 use Behat\Mink\Session;
-use Drupal\Component\Utility\Crypt;
-use Drupal\Component\Utility\Random;
 use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Database\ConnectionNotDefinedException;
 use Drupal\Core\Database\Database;
@@ -25,6 +24,7 @@ use Drupal\Core\Session\UserSession;
 use Drupal\Core\Site\Settings;
 use Drupal\Core\StreamWrapper\StreamWrapperInterface;
 use Drupal\Core\Test\TestRunnerKernel;
+use Drupal\Core\Url;
 use Drupal\user\UserInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -52,6 +52,7 @@ use Symfony\Component\HttpFoundation\Request;
  */
 abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
 
+  use RandomGeneratorTrait;
   use SessionTestTrait;
 
   /**
@@ -147,13 +148,6 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
   protected $configImporter;
 
   /**
-   * The random data generator.
-   *
-   * @var \Drupal\Component\Utility\Random
-   */
-  protected $randomGenerator;
-
-  /**
    * The profile to install as a basis for testing.
    *
    * @var string
@@ -188,6 +182,33 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
    */
   protected $customTranslations;
 
+  /*
+   * Mink class for the default driver to use.
+   *
+   * Shoud be a fully qualified class name that implements
+   * Behat\Mink\Driver\DriverInterface.
+   *
+   * Value can be overridden using the environment variable MINK_DRIVER_CLASS.
+   *
+   * @var string.
+   */
+  protected $minkDefaultDriverClass = '\Behat\Mink\Driver\GoutteDriver';
+
+  /*
+   * Mink default driver params.
+   *
+   * If it's an array its contents are used as constructor params when default
+   * Mink driver class is instantiated.
+   *
+   * Can be overridden using the environment variable MINK_DRIVER_ARGS. In this
+   * case that variable should be a JSON array, for example:
+   * '["firefox", null, "http://localhost:4444/wd/hub"]'.
+   *
+   *
+   * @var array
+   */
+  protected $minkDefaultDriverArgs;
+
   /**
    * Mink session manager.
    *
@@ -199,13 +220,49 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
    * Initializes Mink sessions.
    */
   protected function initMink() {
-    $driver = new GoutteDriver();
+    $driver = $this->getDefaultDriverInstance();
     $session = new Session($driver);
     $this->mink = new Mink();
-    $this->mink->registerSession('goutte', $session);
-    $this->mink->setDefaultSessionName('goutte');
+    $this->mink->registerSession('default', $session);
+    $this->mink->setDefaultSessionName('default');
     $this->registerSessions();
     return $session;
+  }
+
+  /**
+   * Gets an instance of the default Mink driver.
+   *
+   * @return Behat\Mink\Driver\DriverInterface
+   *   Instance of default Mink driver.
+   *
+   * @throws \InvalidArgumentException
+   *   When provided default Mink driver class can't be instantiated.
+   */
+  protected function getDefaultDriverInstance() {
+    // Get default driver params from environment if availables.
+    if ($arg_json = getenv('MINK_DRIVER_ARGS')) {
+      $this->minkDefaultDriverArgs = json_decode($arg_json);
+    }
+
+    // Get and check default driver class from environment if availables.
+    if ($minkDriverClass = getenv('MINK_DRIVER_CLASS')) {
+      if (class_exists($minkDriverClass)) {
+        $this->minkDefaultDriverClass = $minkDriverClass;
+      }
+      else {
+        throw new \InvalidArgumentException("Can't instantiate provided $minkDriverClass class by environment as default driver class.");
+      }
+    }
+
+    if (is_array($this->minkDefaultDriverArgs)) {
+       // Use ReflectionClass to instantiate class with received params.
+      $reflector = new ReflectionClass($this->minkDefaultDriverClass);
+      $driver = $reflector->newInstanceArgs($this->minkDefaultDriverArgs);
+    }
+    else {
+      $driver =  new $this->minkDefaultDriverClass();
+    }
+    return $driver;
   }
 
   /**
@@ -324,10 +381,9 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     $test_connection_info = Database::getConnectionInfo('default');
     $test_prefix = $test_connection_info['default']['prefix']['default'];
     if ($original_prefix != $test_prefix) {
-      $tables = Database::getConnection()->schema()->findTables($test_prefix . '%');
-      $prefix_length = strlen($test_prefix);
+      $tables = Database::getConnection()->schema()->findTables('%');
       foreach ($tables as $table) {
-        if (Database::getConnection()->schema()->dropTable(substr($table, $prefix_length))) {
+        if (Database::getConnection()->schema()->dropTable($table)) {
           unset($tables[$table]);
         }
       }
@@ -413,7 +469,14 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     // The URL generator service is not necessarily available yet; e.g., in
     // interactive installer tests.
     if ($this->container->has('url_generator')) {
-      $url = $this->container->get('url_generator')->generateFromPath($path, $options);
+      if (UrlHelper::isExternal($path)) {
+        $url = Url::fromUri($path, $options)->toString();
+      }
+      else {
+        // This is needed for language prefixing.
+        $options['path_processing'] = TRUE;
+        $url = Url::fromUri('base:/' . $path, $options)->toString();
+      }
     }
     else {
       $url = $this->getAbsoluteUrl($path);
@@ -452,7 +515,7 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
         $path = substr($path, $length);
       }
       // Ensure that we have an absolute path.
-      if ($path[0] !== '/') {
+      if (empty($path) || $path[0] !== '/') {
         $path = '/' . $path;
       }
       // Finally, prepend the $base_url.
@@ -571,69 +634,6 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     }
 
     return FALSE;
-  }
-
-  /**
-   * Gets the random generator for the utility methods.
-   *
-   * @return \Drupal\Component\Utility\Random
-   *   The random generator
-   */
-  protected function getRandomGenerator() {
-    if (!is_object($this->randomGenerator)) {
-      $this->randomGenerator = new Random();
-    }
-    return $this->randomGenerator;
-  }
-
-  /**
-   * Generates a unique random string containing letters and numbers.
-   *
-   * Do not use this method when testing unvalidated user input. Instead, use
-   * \Drupal\simpletest\BrowserTestBase::randomString().
-   *
-   * @param int $length
-   *   (optional) Length of random string to generate.
-   *
-   * @return string
-   *   Randomly generated unique string.
-   *
-   * @see \Drupal\Component\Utility\Random::name()
-   */
-  public function randomMachineName($length = 8) {
-    return $this->getRandomGenerator()->name($length, TRUE);
-  }
-
-  /**
-   * Generates a pseudo-random string of ASCII characters of codes 32 to 126.
-   *
-   * Do not use this method when special characters are not possible (e.g., in
-   * machine or file names that have already been validated); instead, use
-   * \Drupal\simpletest\TestBase::randomMachineName(). If $length is greater
-   * than 2 the random string will include at least one ampersand ('&')
-   * character to ensure coverage for special characters and avoid the
-   * introduction of random test failures.
-   *
-   * @param int $length
-   *   (optional) Length of random string to generate.
-   *
-   * @return string
-   *   Pseudo-randomly generated unique string including special characters.
-   *
-   * @see \Drupal\Component\Utility\Random::string()
-   */
-  public function randomString($length = 8) {
-    if ($length < 3) {
-      return $this->getRandomGenerator()->string($length, TRUE, array($this, 'randomStringValidate'));
-    }
-
-    // To prevent the introduction of random test failures, ensure that the
-    // returned string contains a character that needs to be escaped in HTML by
-    // injecting an ampersand into it.
-    $replacement_pos = floor($length / 2);
-    // Remove 1 from the length to account for the ampersand character.
-    $string = $this->getRandomGenerator()->string($length - 1, TRUE, array($this, 'randomStringValidate'));
-    return substr_replace($string, '&', $replacement_pos, 0);
   }
 
   /**
@@ -843,7 +843,6 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     // Not using File API; a potential error must trigger a PHP warning.
     $directory = DRUPAL_ROOT . '/' . $this->siteDirectory;
     copy(DRUPAL_ROOT . '/sites/default/default.settings.php', $directory . '/settings.php');
-    copy(DRUPAL_ROOT . '/sites/default/default.services.yml', $directory . '/services.yml');
 
     // All file system paths are created by System module during installation.
     // @see system_requirements()
@@ -950,7 +949,7 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     // Reset/rebuild all data structures after enabling the modules, primarily
     // to synchronize all data structures and caches between the test runner and
     // the child site.
-    // Affects e.g. file_get_stream_wrappers().
+    // Affects e.g. StreamWrapperManagerInterface::getWrappers().
     // @see \Drupal\Core\DrupalKernel::bootCode()
     // @todo Test-specific setUp() methods may set up further fixtures; find a
     //   way to execute this after setUp() is done, or to eliminate it entirely.
@@ -1083,7 +1082,7 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
    */
   protected function prepareEnvironment() {
     // Bootstrap Drupal so we can use Drupal's built in functions.
-    $this->classLoader = require __DIR__ . '/../../../vendor/autoload.php';
+    $this->classLoader = require __DIR__ . '/../../../../autoload.php';
     $request = Request::createFromGlobals();
     $kernel = TestRunnerKernel::createFromRequest($request, $this->classLoader);
     // TestRunnerKernel expects the working directory to be DRUPAL_ROOT.
@@ -1258,7 +1257,7 @@ abstract class BrowserTestBase extends \PHPUnit_Framework_TestCase {
     $server = array_merge($server, $override_server_vars);
 
     $request = Request::create($request_path, 'GET', array(), array(), array(), $server);
-    // Ensure the the request time is REQUEST_TIME to ensure that API calls
+    // Ensure the request time is REQUEST_TIME to ensure that API calls
     // in the test use the right timestamp.
     $request->server->set('REQUEST_TIME', REQUEST_TIME);
     $this->container->get('request_stack')->push($request);

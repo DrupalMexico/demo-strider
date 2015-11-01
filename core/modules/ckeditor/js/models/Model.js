@@ -5,7 +5,7 @@
 
 (function (Drupal, Backbone) {
 
-  "use strict";
+  'use strict';
 
   /**
    * Backbone model for the CKEditor toolbar configuration state.
@@ -46,6 +46,11 @@
        * build the features metadata.
        */
       hiddenEditorConfig: null,
+
+      /**
+       * A hash that maps buttons to features.
+       */
+      buttonsToFeatures: null,
 
       /**
        * A hash, keyed by a feature name, that details CKEditor plugin features.

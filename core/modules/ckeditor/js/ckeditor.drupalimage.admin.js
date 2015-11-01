@@ -5,12 +5,15 @@
 
 (function ($, Drupal, drupalSettings) {
 
-  "use strict";
+  'use strict';
 
   /**
    * Provides the summary for the "drupalimage" plugin settings vertical tab.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches summary behaviour to the "drupalimage" settings vertical tab.
    */
   Drupal.behaviors.ckeditorDrupalImageSettingsSummary = {
     attach: function () {
