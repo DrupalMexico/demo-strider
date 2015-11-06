@@ -5,12 +5,15 @@
 
 (function ($) {
 
-  "use strict";
+  'use strict';
 
   /**
    * Displays the guidelines of the selected text format automatically.
    *
    * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches behavior for updating filter guidelines.
    */
   Drupal.behaviors.filterGuidelines = {
     attach: function (context) {

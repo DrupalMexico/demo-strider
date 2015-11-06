@@ -7,12 +7,8 @@
 
 namespace Drupal\comment\Plugin\Field\FieldFormatter;
 
-use Drupal\comment\CommentManagerInterface;
-use Drupal\comment\CommentStorageInterface;
-use Drupal\comment\Entity\Comment;
 use Drupal\comment\Plugin\Field\FieldType\CommentItemInterface;
 use Drupal\Core\Entity\EntityManagerInterface;
-use Drupal\Core\Entity\EntityViewBuilderInterface;
 use Drupal\Core\Entity\EntityFormBuilderInterface;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Form\FormStateInterface;
@@ -137,7 +133,7 @@ class CommentDefaultFormatter extends FormatterBase implements ContainerFactoryP
   /**
    * {@inheritdoc}
    */
-  public function viewElements(FieldItemListInterface $items) {
+  public function viewElements(FieldItemListInterface $items, $langcode) {
     $elements = array();
     $output = array();
 
@@ -159,9 +155,7 @@ class CommentDefaultFormatter extends FormatterBase implements ContainerFactoryP
       // should display if the user is an administrator.
       $elements['#cache']['contexts'][] = 'user.permissions';
       if ($this->currentUser->hasPermission('access comments') || $this->currentUser->hasPermission('administer comments')) {
-        // This is a listing of Comment entities, so associate its list cache
-        // tag for correct invalidation.
-        $output['comments']['#cache']['tags'] = $this->entityManager->getDefinition('comment')->getListCacheTags();
+        $output['comments'] = [];
 
         if ($entity->get($field_name)->comment_count || $this->currentUser->hasPermission('administer comments')) {
           $mode = $comment_settings['default_mode'];
@@ -184,31 +178,15 @@ class CommentDefaultFormatter extends FormatterBase implements ContainerFactoryP
         // Only show the add comment form if the user has permission.
         $elements['#cache']['contexts'][] = 'user.roles';
         if ($this->currentUser->hasPermission('post comments')) {
-          // All users in the "anonymous" role can use the same form: it is fine
-          // for this form to be stored in the render cache.
-          if ($this->currentUser->isAnonymous()) {
-            $comment = $this->storage->create(array(
-              'entity_type' => $entity->getEntityTypeId(),
-              'entity_id' => $entity->id(),
-              'field_name' => $field_name,
-              'comment_type' => $this->getFieldSetting('comment_type'),
-              'pid' => NULL,
-            ));
-            $output['comment_form'] = $this->entityFormBuilder->getForm($comment);
-          }
-          // All other users need a user-specific form, which would break the
-          // render cache: hence use a #lazy_builder callback.
-          else {
-            $output['comment_form'] = [
-              '#lazy_builder' => ['comment.lazy_builders:renderForm', [
-                $entity->getEntityTypeId(),
-                $entity->id(),
-                $field_name,
-                $this->getFieldSetting('comment_type'),
-              ]],
-              '#create_placeholder' => TRUE,
-            ];
-          }
+          $output['comment_form'] = [
+            '#lazy_builder' => ['comment.lazy_builders:renderForm', [
+              $entity->getEntityTypeId(),
+              $entity->id(),
+              $field_name,
+              $this->getFieldSetting('comment_type'),
+            ]],
+            '#create_placeholder' => TRUE,
+          ];
         }
       }
 

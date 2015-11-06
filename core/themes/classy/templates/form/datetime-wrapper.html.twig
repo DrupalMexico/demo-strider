@@ -16,6 +16,7 @@
 {%
   set title_classes = [
     'label',
+    required ? 'js-form-required',
     required ? 'form-required',
   ]
 %}
@@ -24,7 +25,7 @@
 {% endif %}
 {{ content }}
 {% if errors %}
-  <div class="form-error-message">
+  <div class="form-item--error-message">
     <strong>{{ errors }}</strong>
   </div>
 {% endif %}

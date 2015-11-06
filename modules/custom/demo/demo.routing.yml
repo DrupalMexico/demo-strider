@@ -1,0 +1,8 @@
+
+demo.default_controller_index:
+  path: '/demo/index/hello'
+  defaults:
+    _controller: '\Drupal\demo\Controller\DefaultController::index'
+    _title: 'Default'
+  requirements:
+    _permission: 'access content'

@@ -7,9 +7,9 @@
 
 namespace Drupal\url_alter_test;
 
-use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\PathProcessor\InboundPathProcessorInterface;
 use Drupal\Core\PathProcessor\OutboundPathProcessorInterface;
+use Drupal\Core\Render\BubbleableMetadata;
 use Symfony\Component\HttpFoundation\Request;
 use Drupal\user\Entity\User;
 
@@ -31,9 +31,7 @@ class PathProcessorTest implements InboundPathProcessorInterface, OutboundPathPr
     }
 
     // Rewrite community/ to forum/.
-    if ($path == '/community' || strpos($path, '/community/') === 0) {
-      $path = '/forum' . substr($path, 10);
-    }
+    $path = preg_replace('@^/community(.*)@', '/forum$1', $path);
 
     if ($path == '/url-alter-test/bar') {
       $path = '/url-alter-test/foo';
@@ -44,23 +42,20 @@ class PathProcessorTest implements InboundPathProcessorInterface, OutboundPathPr
   /**
    * Implements Drupal\Core\PathProcessor\OutboundPathProcessorInterface::processOutbound().
    */
-  public function processOutbound($path, &$options = array(), Request $request = NULL, CacheableMetadata $cacheable_metadata = NULL) {
+  public function processOutbound($path, &$options = array(), Request $request = NULL, BubbleableMetadata $bubbleable_metadata = NULL) {
     // Rewrite user/uid to user/username.
     if (preg_match('!^/user/([0-9]+)(/.*)?!', $path, $matches)) {
       if ($account = User::load($matches[1])) {
         $matches += array(2 => '');
         $path = '/user/' . $account->getUsername() . $matches[2];
-        if ($cacheable_metadata) {
-          $cacheable_metadata->addCacheTags($account->getCacheTags());
+        if ($bubbleable_metadata) {
+          $bubbleable_metadata->addCacheTags($account->getCacheTags());
         }
       }
     }
 
     // Rewrite forum/ to community/.
-    if ($path == '/forum' || strpos($path, '/forum/') === 0) {
-      $path = '/community' . substr($path, 5);
-    }
-    return $path;
+    return preg_replace('@^/forum(.*)@', '/community$1', $path);
   }
 
 }

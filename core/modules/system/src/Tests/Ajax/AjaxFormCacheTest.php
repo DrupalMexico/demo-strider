@@ -37,15 +37,6 @@ class AjaxFormCacheTest extends AjaxTestBase {
 
     // The number of cache entries should not have changed.
     $this->assertEqual(0, count($key_value_expirable->getAll()));
-
-    // Visit a form that is explicitly cached, 3 times.
-    $cached_form_url = Url::fromRoute('ajax_forms_test.cached_form');
-    $this->drupalGet($cached_form_url);
-    $this->drupalGet($cached_form_url);
-    $this->drupalGet($cached_form_url);
-
-    // The number of cache entries should be exactly 3.
-    $this->assertEqual(3, count($key_value_expirable->getAll()));
   }
 
   /**
@@ -58,7 +49,7 @@ class AjaxFormCacheTest extends AjaxTestBase {
     $this->drupalLogin($this->rootUser);
 
     $this->drupalPlaceBlock('search_form_block', ['weight' => -5]);
-    $this->drupalPlaceBlock('ajax_forms_test_block', ['cache' => ['max_age' => 0]]);
+    $this->drupalPlaceBlock('ajax_forms_test_block');
 
     $this->drupalGet('');
     $this->drupalPostAjaxForm(NULL, ['test1' => 'option1'], 'test1');
@@ -75,7 +66,7 @@ class AjaxFormCacheTest extends AjaxTestBase {
     $this->container->get('module_installer')->install(['block']);
     $this->drupalLogin($this->rootUser);
 
-    $this->drupalPlaceBlock('ajax_forms_test_block', ['cache' => ['max_age' => 0]]);
+    $this->drupalPlaceBlock('ajax_forms_test_block');
 
     $url = Url::fromRoute('entity.user.canonical', ['user' => $this->rootUser->id()], ['query' => ['foo' => 'bar']]);
     $this->drupalGet($url);

@@ -154,7 +154,7 @@ class DefaultPluginManager extends PluginManagerBase implements PluginManagerInt
    *   definitions should be cleared along with other, related cache entries.
    */
   public function setCacheBackend(CacheBackendInterface $cache_backend, $cache_key, array $cache_tags = array()) {
-    Cache::validateTags($cache_tags);
+    assert('\Drupal\Component\Assertion\Inspector::assertAllStrings($cache_tags)', 'Cache Tags must be strings.');
     $this->cacheBackend = $cache_backend;
     $this->cacheKey = $cache_key;
     $this->cacheTags = $cache_tags;
@@ -336,7 +336,7 @@ class DefaultPluginManager extends PluginManagerBase implements PluginManagerInt
   /**
    * Determines if the provider of a definition exists.
    *
-   * @return boolean
+   * @return bool
    *   TRUE if provider exists, FALSE otherwise.
    */
   protected function providerExists($provider) {

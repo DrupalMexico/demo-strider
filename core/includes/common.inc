@@ -9,32 +9,18 @@
  */
 
 use Drupal\Component\Serialization\Json;
-use Drupal\Component\Serialization\Yaml;
-use Drupal\Component\Serialization\Exception\InvalidDataTypeException;
 use Drupal\Component\Utility\Bytes;
-use Drupal\Component\Utility\Crypt;
 use Drupal\Component\Utility\Html;
-use Drupal\Component\Utility\Number;
 use Drupal\Component\Utility\SortArray;
-use Drupal\Component\Utility\SafeMarkup;
-use Drupal\Component\Utility\Tags;
 use Drupal\Component\Utility\UrlHelper;
-use Drupal\Core\Asset\AttachedAssets;
 use Drupal\Core\Cache\Cache;
-use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Render\Markup;
 use Drupal\Core\Render\Renderer;
-use Drupal\Core\Site\Settings;
-use Drupal\Core\Url;
-use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\Request;
+use Drupal\Core\StringTranslation\TranslatableMarkup;
 use Drupal\Core\PhpStorage\PhpStorageFactory;
-use Drupal\Component\Utility\NestedArray;
-use Drupal\Core\Datetime\DrupalDateTime;
-use Drupal\Core\Routing\GeneratorNotInitializedException;
-use Drupal\Core\Template\Attribute;
+use Drupal\Core\StringTranslation\PluralTranslatableMarkup;
 use Drupal\Core\Render\BubbleableMetadata;
 use Drupal\Core\Render\Element;
-use Drupal\Core\Session\AnonymousUserSession;
 
 /**
  * @defgroup php_wrappers PHP wrapper functions
@@ -140,67 +126,11 @@ const JS_THEME = 100;
 /**
  * The delimiter used to split plural strings.
  *
- * This is the ETX (End of text) character and is used as a minimal means to
- * separate singular and plural variants in source and translation text. It
- * was found to be the most compatible delimiter for the supported databases.
+ * @deprecated in Drupal 8.0.x-dev, will be removed before Drupal 9.0.0.
+ *   Use \Drupal\Core\StringTranslation\PluralTranslatableMarkup::DELIMITER
+ *   instead.
  */
-const LOCALE_PLURAL_DELIMITER = "\03";
-
-/**
- * Adds output to the HEAD tag of the HTML page.
- *
- * This function can be called as long as the headers aren't sent. Pass no
- * arguments (or NULL for both) to retrieve the currently stored elements.
- *
- * @param $data
- *   A renderable array. If the '#type' key is not set then 'html_tag' will be
- *   added as the default '#type'.
- * @param $key
- *   A unique string key to allow implementations of hook_html_head_alter() to
- *   identify the element in $data. Required if $data is not NULL.
- *
- * @return
- *   An array of all stored HEAD elements.
- *
- * @see \Drupal\Core\Render\Element\HtmlTag::preRenderHtmlTag()
- *
- * @deprecated in Drupal 8.0.x, will be removed before Drupal 8.0.0
- *   Use #attached on render arrays.
- */
-function _drupal_add_html_head($data = NULL, $key = NULL) {
-  $stored_head = &drupal_static(__FUNCTION__, array());
-
-  if (isset($data) && isset($key)) {
-    if (!isset($data['#type'])) {
-      $data['#type'] = 'html_tag';
-    }
-    $stored_head[$key] = $data;
-  }
-  return $stored_head;
-}
-
-/**
- * Retrieves output to be displayed in the HEAD tag of the HTML page.
- *
- * @param bool $render
- *   If TRUE render the HEAD elements, otherwise return just the elements.
- *
- * @return string|array
- *   Return the rendered HTML head or the elements itself.
- *
- * @deprecated in Drupal 8.0.x, will be removed before Drupal 8.0.0
- *   Use #attached on render arrays.
- */
-function drupal_get_html_head($render = TRUE) {
-  $elements = _drupal_add_html_head();
-  \Drupal::moduleHandler()->alter('html_head', $elements);
-  if ($render) {
-    return \Drupal::service('renderer')->renderPlain($elements);
-  }
-  else {
-    return $elements;
-  }
-}
+const LOCALE_PLURAL_DELIMITER = PluralTranslatableMarkup::DELIMITER;
 
 /**
  * Prepares a 'destination' URL query parameter for use with url().
@@ -270,7 +200,7 @@ function valid_email_address($mail) {
  * @param $uri
  *   A plain-text URI that might contain dangerous protocols.
  *
- * @return
+ * @return string
  *   A URI stripped of dangerous protocols and encoded for output to an HTML
  *   attribute value. Because it is already encoded, it should not be set as a
  *   value within a $attributes array passed to Drupal\Core\Template\Attribute,
@@ -280,10 +210,20 @@ function valid_email_address($mail) {
  *   \Drupal\Component\Utility\UrlHelper::stripDangerousProtocols() instead.
  *
  * @see \Drupal\Component\Utility\UrlHelper::stripDangerousProtocols()
- * @see \Drupal\Component\Utility\SafeMarkup::checkPlain()
+ * @see \Drupal\Component\Utility\UrlHelper::filterBadProtocol()
+ *
+ * @deprecated in Drupal 8.0.x-dev, will be removed before Drupal 9.0.0.
+ *   Use UrlHelper::stripDangerousProtocols() or UrlHelper::filterBadProtocol()
+ *   instead. UrlHelper::stripDangerousProtocols() can be used in conjunction
+ *   with \Drupal\Component\Utility\SafeMarkup::format() and an @variable
+ *   placeholder which will perform the necessary escaping.
+ *   UrlHelper::filterBadProtocol() is functionality equivalent to check_url()
+ *   apart from the fact it is protected from double escaping bugs. Note that
+ *   this method no longer marks its output as safe.
+ *
  */
 function check_url($uri) {
-  return SafeMarkup::checkPlain(UrlHelper::stripDangerousProtocols($uri));
+  return Html::escape(UrlHelper::stripDangerousProtocols($uri));
 }
 
 /**
@@ -305,7 +245,7 @@ function check_url($uri) {
  *   Optional language code to translate to a language other than what is used
  *   to display the page.
  *
- * @return
+ * @return \Drupal\Core\StringTranslation\TranslatableMarkup
  *   A translated string representation of the size.
  */
 function format_size($size, $langcode = NULL) {
@@ -314,16 +254,7 @@ function format_size($size, $langcode = NULL) {
   }
   else {
     $size = $size / Bytes::KILOBYTE; // Convert bytes to kilobytes.
-    $units = array(
-      t('@size KB', array(), array('langcode' => $langcode)),
-      t('@size MB', array(), array('langcode' => $langcode)),
-      t('@size GB', array(), array('langcode' => $langcode)),
-      t('@size TB', array(), array('langcode' => $langcode)),
-      t('@size PB', array(), array('langcode' => $langcode)),
-      t('@size EB', array(), array('langcode' => $langcode)),
-      t('@size ZB', array(), array('langcode' => $langcode)),
-      t('@size YB', array(), array('langcode' => $langcode)),
-    );
+    $units = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     foreach ($units as $unit) {
       if (round($size, 2) >= Bytes::KILOBYTE) {
         $size = $size / Bytes::KILOBYTE;
@@ -332,7 +263,26 @@ function format_size($size, $langcode = NULL) {
         break;
       }
     }
-    return str_replace('@size', round($size, 2), $unit);
+    $args = ['@size' => round($size, 2)];
+    $options = ['langcode' => $langcode];
+    switch ($unit) {
+      case 'KB':
+        return new TranslatableMarkup('@size KB', $args, $options);
+      case 'MB':
+        return new TranslatableMarkup('@size MB', $args, $options);
+      case 'GB':
+        return new TranslatableMarkup('@size GB', $args, $options);
+      case 'TB':
+        return new TranslatableMarkup('@size TB', $args, $options);
+      case 'PB':
+        return new TranslatableMarkup('@size PB', $args, $options);
+      case 'EB':
+        return new TranslatableMarkup('@size EB', $args, $options);
+      case 'ZB':
+        return new TranslatableMarkup('@size ZB', $args, $options);
+      case 'YB':
+        return new TranslatableMarkup('@size YB', $args, $options);
+    }
   }
 }
 
@@ -366,6 +316,9 @@ function format_size($size, $langcode = NULL) {
  *   A translated date string in the requested format.
  *
  * @see \Drupal\Core\Datetime\DateFormatter::format()
+ *
+ * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
+ *   Use \Drupal::service('date.formatter')->format().
  */
 function format_date($timestamp, $type = 'medium', $format = '', $timezone = NULL, $langcode = NULL) {
   return \Drupal::service('date.formatter')->format($timestamp, $type, $format, $timezone, $langcode);
@@ -463,39 +416,6 @@ function base_path() {
 }
 
 /**
- * Adds a LINK tag with a distinct 'rel' attribute to the page's HEAD.
- *
- * This function can be called as long the HTML header hasn't been sent, which
- * on normal pages is up through the preprocess step of _theme('html'). Adding
- * a link will overwrite a prior link with the exact same 'rel' and 'href'
- * attributes.
- *
- * @param $attributes
- *   Associative array of element attributes including 'href' and 'rel'.
- * @param $header
- *   Optional flag to determine if a HTTP 'Link:' header should be sent.
- *
- * @deprecated in Drupal 8.0.x, will be removed before Drupal 8.0.0
- *   Use #attached on render arrays.
- */
-function _drupal_add_html_head_link($attributes, $header = FALSE) {
-  $element = array(
-    '#tag' => 'link',
-    '#attributes' => $attributes,
-  );
-  $href = $attributes['href'];
-
-  if ($header) {
-    // Also add a HTTP header "Link:".
-    $href = '<' . SafeMarkup::checkPlain($attributes['href']) . '>;';
-    unset($attributes['href']);
-    $element['#attached']['http_header'][] = array('Link',  $href . drupal_http_header_attributes($attributes), TRUE);
-  }
-
-  _drupal_add_html_head($element, 'html_head_link:' . $attributes['rel'] . ':' . $href);
-}
-
-/**
  * Deletes old cached CSS files.
  *
  * @deprecated in Drupal 8.x, will be removed before Drupal 9.0.
@@ -517,7 +437,6 @@ function drupal_js_defaults($data = NULL) {
   return array(
     'type' => 'file',
     'group' => JS_DEFAULT,
-    'every_page' => FALSE,
     'weight' => 0,
     'scope' => 'header',
     'cache' => TRUE,
@@ -527,128 +446,6 @@ function drupal_js_defaults($data = NULL) {
     'data' => $data,
     'browsers' => array(),
   );
-}
-
-/**
- * Merges two #attached arrays.
- *
- * The values under the 'drupalSettings' key are merged in a special way, to
- * match the behavior of:
- *
- * @code
- *   jQuery.extend(true, {}, $settings_items[0], $settings_items[1], ...)
- * @endcode
- *
- * This means integer indices are preserved just like string indices are,
- * rather than re-indexed as is common in PHP array merging.
- *
- * Example:
- * @code
- * function module1_page_attachments(&$page) {
- *   $page['a']['#attached']['drupalSettings']['foo'] = ['a', 'b', 'c'];
- * }
- * function module2_page_attachments(&$page) {
- *   $page['#attached']['drupalSettings']['foo'] = ['d'];
- * }
- * // When the page is rendered after the above code, and the browser runs the
- * // resulting <SCRIPT> tags, the value of drupalSettings.foo is
- * // ['d', 'b', 'c'], not ['a', 'b', 'c', 'd'].
- * @endcode
- *
- * By following jQuery.extend() merge logic rather than common PHP array merge
- * logic, the following are ensured:
- * - Attaching JavaScript settings is idempotent: attaching the same settings
- *   twice does not change the output sent to the browser.
- * - If pieces of the page are rendered in separate PHP requests and the
- *   returned settings are merged by JavaScript, the resulting settings are the
- *   same as if rendered in one PHP request and merged by PHP.
- *
- * @param array $a
- *   An #attached array.
- * @param array $b
- *   Another #attached array.
- *
- * @return array
- *   The merged #attached array.
- *
- * @deprecated To be removed in Drupal 8.0.x. Use
- *   \Drupal\Core\Render\BubbleableMetadata::mergeAttachments() instead.
- */
-function drupal_merge_attached(array $a, array $b) {
-  return BubbleableMetadata::mergeAttachments($a, $b);
-}
-
-/**
- * Processes non-asset attachments in a render() structure.
- *
- * Libraries, JavaScript settings, feeds, HTML <head> tags and HTML <head> links
- * are attached to elements using the #attached property. The #attached property
- * is an associative array, where the keys are the attachment types and the
- * values are the attached data. For example:
- *
- * @code
- * $build['#attached'] = [
- *   'library' => ['core/jquery']
- * ];
- * $build['#attached']['http_header'] = [
- *   ['Content-Type', 'application/rss+xml; charset=utf-8'],
- * ];
- * @endcode
- *
- * The available keys are:
- * - 'library' (asset libraries)
- * - 'drupalSettings' (JavaScript settings)
- * - 'feed' (RSS feeds)
- * - 'html_head' (tags in HTML <head>)
- * - 'html_head_link' (<link> tags in HTML <head>)
- * - 'http_header' (HTTP headers)
- *
- * This function processes all non-asset attachments, to apply them to the
- * current response (that means all keys except 'library' and 'drupalSettings').
- *
- * @param array $elements
- *   The structured array describing the data being rendered.
- *
- * @see drupal_render()
- * @see \Drupal\Core\Asset\AssetResolver
- *
- * @throws LogicException
- *   When attaching something of a non-existing attachment type.
- */
-function drupal_process_attached(array $elements) {
-  // Asset attachments are handled by \Drupal\Core\Asset\AssetResolver.
-  foreach (array('library', 'drupalSettings') as $type) {
-    unset($elements['#attached'][$type]);
-  }
-
-  // Add additional types of attachments specified in the render() structure.
-  foreach ($elements['#attached'] as $callback => $options) {
-    foreach ($elements['#attached'][$callback] as $args) {
-      // Limit the amount allowed entries.
-      switch ($callback) {
-        case 'html_head':
-          call_user_func_array('_drupal_add_html_head', $args);
-          break;
-        case 'feed':
-          $args = [[
-            'href' => $args[0],
-            'rel' => 'alternate',
-            'title' => $args[1],
-            'type' => 'application/rss+xml',
-          ]];
-          call_user_func_array('_drupal_add_html_head_link', $args);
-          break;
-        case 'html_head_link':
-          call_user_func_array('_drupal_add_html_head_link', $args);
-          break;
-        case 'http_header':
-          call_user_func_array('_drupal_add_http_header', $args);
-          break;
-        default:
-          throw new \LogicException(sprintf('You are not allowed to use %s in #attached', $callback));
-      }
-    }
-  }
 }
 
 /**
@@ -856,9 +653,9 @@ function drupal_process_states(&$elements) {
  * foreach ($regions as $region) {
  *   drupal_attach_tabledrag('my-module-table', array(
  *     'action' => 'order',
- *     'relationship' => sibling',
+ *     'relationship' => 'sibling',
  *     'group' => 'my-elements-weight',
- *     'subgroup' => my-elements-weight-' . $region,
+ *     'subgroup' => 'my-elements-weight-' . $region,
  *   ));
  * }
  * @endcode
@@ -1036,7 +833,7 @@ function drupal_pre_render_links($element) {
     $child = &$element[$key];
     // If the child has links which have not been printed yet and the user has
     // access to it, merge its links in to the parent.
-    if (isset($child['#links']) && empty($child['#printed']) && (!isset($child['#access']) || $child['#access'])) {
+    if (isset($child['#links']) && empty($child['#printed']) && Element::isVisibleElement($child)) {
       $element['#links'] += $child['#links'];
       // Mark the child as having been printed already (so that its links
       // cannot be mistakenly rendered twice).
@@ -1044,7 +841,7 @@ function drupal_pre_render_links($element) {
     }
     // Merge attachments.
     if (isset($child['#attached'])) {
-      $element['#attached'] = drupal_merge_attached($element['#attached'], $child['#attached']);
+      $element['#attached'] = BubbleableMetadata::mergeAttachments($element['#attached'], $child['#attached']);
     }
   }
   return $element;
@@ -1084,8 +881,9 @@ function drupal_render(&$elements, $is_recursive_call = FALSE) {
  *   can be passed in to save another run of
  *   \Drupal\Core\Render\Element::children().
  *
- * @return string
+ * @return string|\Drupal\Component\Render\MarkupInterface
  *   The rendered HTML of all children of the element.
+ *
  * @see drupal_render()
  */
 function drupal_render_children(&$element, $children_keys = NULL) {
@@ -1098,7 +896,7 @@ function drupal_render_children(&$element, $children_keys = NULL) {
       $output .= drupal_render($element[$key]);
     }
   }
-  return SafeMarkup::set($output);
+  return Markup::create($output);
 }
 
 /**
@@ -1196,7 +994,7 @@ function show(&$element) {
  * Retrieves the default properties for the defined element type.
  *
  * @param $type
- *   An element type as defined by hook_element_info().
+ *   An element type as defined by an element plugin.
  *
  * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
  *   Use \Drupal::service('element_info')->getInfo() instead.
@@ -1209,7 +1007,7 @@ function element_info($type) {
  * Retrieves a single property for the defined element type.
  *
  * @param $type
- *   An element type as defined by hook_element_info().
+ *   An element type as defined by an element plugin.
  * @param $property_name
  *   The property within the element type that should be returned.
  * @param $default
@@ -1295,8 +1093,10 @@ function drupal_flush_all_caches() {
   // Reset all static caches.
   drupal_static_reset();
 
-  // Wipe the PHP Storage caches.
-  PhpStorageFactory::get('service_container')->deleteAll();
+  // Invalidate the container.
+  \Drupal::service('kernel')->invalidateContainer();
+
+  // Wipe the Twig PHP Storage cache.
   PhpStorageFactory::get('twig')->deleteAll();
 
   // Rebuild module and theme data.
@@ -1374,7 +1174,7 @@ function _drupal_flush_css_js() {
  */
 function debug($data, $label = NULL, $print_r = TRUE) {
   // Print $data contents to string.
-  $string = SafeMarkup::checkPlain($print_r ? print_r($data, TRUE) : var_export($data, TRUE));
+  $string = Html::escape($print_r ? print_r($data, TRUE) : var_export($data, TRUE));
 
   // Display values with pre-formatting to increase readability.
   $string = '<pre>' . $string . '</pre>';

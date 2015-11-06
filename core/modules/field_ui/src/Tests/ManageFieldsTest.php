@@ -10,7 +10,7 @@ namespace Drupal\field_ui\Tests;
 use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Language\LanguageInterface;
-use Drupal\entity_reference\Tests\EntityReferenceTestTrait;
+use Drupal\field\Tests\EntityReference\EntityReferenceTestTrait;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\simpletest\WebTestBase;
@@ -66,7 +66,11 @@ class ManageFieldsTest extends WebTestBase {
    */
   protected function setUp() {
     parent::setUp();
+
     $this->drupalPlaceBlock('system_breadcrumb_block');
+    $this->drupalPlaceBlock('local_actions_block');
+    $this->drupalPlaceBlock('local_tasks_block');
+    $this->drupalPlaceBlock('page_title_block');
 
     // Create a test user.
     $admin_user = $this->drupalCreateUser(array('access content', 'administer content types', 'administer node fields', 'administer node form display', 'administer node display', 'administer taxonomy', 'administer taxonomy_term fields', 'administer taxonomy_term display', 'administer users', 'administer account settings', 'administer user display', 'bypass node access'));
@@ -77,8 +81,8 @@ class ManageFieldsTest extends WebTestBase {
     $type = $this->drupalCreateContentType(array('name' => $type_name, 'type' => $type_name));
     $this->contentType = $type->id();
 
-    // Create random field name.
-    $this->fieldLabel = $this->randomMachineName(8);
+    // Create random field name with markup to test escaping.
+    $this->fieldLabel = '<em>' . $this->randomMachineName(8) . '</em>';
     $this->fieldNameInput =  strtolower($this->randomMachineName(8));
     $this->fieldName = 'field_'. $this->fieldNameInput;
 
@@ -191,6 +195,7 @@ class ManageFieldsTest extends WebTestBase {
     $field_id = 'node.' . $this->contentType . '.' . $this->fieldName;
     // Go to the field edit page.
     $this->drupalGet('admin/structure/types/manage/' . $this->contentType . '/fields/' . $field_id . '/storage');
+    $this->assertEscaped($this->fieldLabel);
 
     // Populate the field settings with new settings.
     $string = 'updated dummy test string';
@@ -399,7 +404,7 @@ class ManageFieldsTest extends WebTestBase {
     $this->drupalPostForm($admin_path, $edit, t('Save settings'));
     $this->assertText("Saved $field_name configuration", 'The form was successfully submitted.');
     $field = FieldConfig::loadByName('node', $this->contentType, $field_name);
-    $this->assertEqual($field->default_value, array(array('value' => 1)), 'The default value was correctly saved.');
+    $this->assertEqual($field->getDefaultValueLiteral(), array(array('value' => 1)), 'The default value was correctly saved.');
 
     // Check that the default value shows up in the form
     $this->drupalGet($admin_path);
@@ -410,7 +415,7 @@ class ManageFieldsTest extends WebTestBase {
     $this->drupalPostForm(NULL, $edit, t('Save settings'));
     $this->assertText("Saved $field_name configuration", 'The form was successfully submitted.');
     $field = FieldConfig::loadByName('node', $this->contentType, $field_name);
-    $this->assertEqual($field->default_value, NULL, 'The default value was correctly saved.');
+    $this->assertEqual($field->getDefaultValueLiteral(), NULL, 'The default value was correctly saved.');
 
     // Check that the default value can be empty when the field is marked as
     // required and can store unlimited values.
@@ -428,7 +433,7 @@ class ManageFieldsTest extends WebTestBase {
     $this->drupalPostForm(NULL, array(), t('Save settings'));
     $this->assertText("Saved $field_name configuration", 'The form was successfully submitted.');
     $field = FieldConfig::loadByName('node', $this->contentType, $field_name);
-    $this->assertEqual($field->default_value, NULL, 'The default value was correctly saved.');
+    $this->assertEqual($field->getDefaultValueLiteral(), NULL, 'The default value was correctly saved.');
 
     // Check that the default widget is used when the field is hidden.
     entity_get_form_display($field->getTargetEntityTypeId(), $field->getTargetBundle(), 'default')
@@ -586,19 +591,6 @@ class ManageFieldsTest extends WebTestBase {
   }
 
   /**
-   * Tests renaming a bundle.
-   */
-  function testRenameBundle() {
-    $type2 = strtolower($this->randomMachineName(8)) . '_test';
-
-    $options = array(
-      'type' => $type2,
-    );
-    $this->drupalPostForm('admin/structure/types/manage/' . $this->contentType, $options, t('Save content type'));
-    $this->manageFieldsPage($type2);
-  }
-
-  /**
    * Tests that a duplicate field name is caught by validation.
    */
   function testDuplicateFieldName() {
@@ -614,6 +606,20 @@ class ManageFieldsTest extends WebTestBase {
 
     $this->assertText(t('The machine-readable name is already in use. It must be unique.'));
     $this->assertUrl($url, array(), 'Stayed on the same page.');
+  }
+
+  /**
+   * Tests that external URLs in the 'destinations' query parameter are blocked.
+   */
+  public function testExternalDestinations() {
+    $options = [
+      'query' => ['destinations' => ['http://example.com']],
+    ];
+    $this->drupalPostForm('admin/structure/types/manage/article/fields/node.article.body/storage', [], 'Save field settings', $options);
+    // The external redirect should not fire.
+    $this->assertUrl('admin/structure/types/manage/article/fields/node.article.body/storage', $options);
+    $this->assertResponse(200);
+    $this->assertRaw('Attempt to update field <em class="placeholder">Body</em> failed: <em class="placeholder">The internal path component &#039;http://example.com&#039; is external. You are not allowed to specify an external URL together with internal:/.</em>.');
   }
 
   /**

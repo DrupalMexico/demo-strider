@@ -66,10 +66,13 @@ class EntityUrlTest extends UnitTestCase {
       $this->assertEquals($langcode, $uri->getOption('language')->getId());
     }
     else {
-      // The expected langcode for a config entity is 'en', because it sets the
-      // value as default property.
-      $expected_langcode = $entity instanceof ConfigEntityInterface ? 'en' : LanguageInterface::LANGCODE_NOT_SPECIFIED;
-      $this->assertEquals($expected_langcode, $uri->getOption('language')->getId());
+      if ($entity instanceof ConfigEntityInterface) {
+        // Config entities do not provide a language with their URIs.
+        $this->assertEquals(NULL, $uri->getOption('language'));
+      }
+      else {
+        $this->assertEquals(LanguageInterface::LANGCODE_NOT_SPECIFIED, $uri->getOption('language')->getId());
+      }
     }
   }
 
@@ -110,7 +113,7 @@ class EntityUrlTest extends UnitTestCase {
    * @covers ::urlInfo
    *
    * @expectedException \Drupal\Core\Entity\Exception\UndefinedLinkTemplateException
-   * @expectedExceptionMessage No link template "canonical" found for the "test_entity_type" entity type
+   * @expectedExceptionMessage No link template 'canonical' found for the 'test_entity_type' entity type
    *
    * @dataProvider providerTestUrlInfoForInvalidLinkTemplate
    */

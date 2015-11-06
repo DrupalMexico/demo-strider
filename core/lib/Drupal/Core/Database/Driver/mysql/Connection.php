@@ -14,6 +14,7 @@ use Drupal\Core\Database\DatabaseNotFoundException;
 use Drupal\Core\Database\TransactionCommitFailedException;
 use Drupal\Core\Database\DatabaseException;
 use Drupal\Core\Database\Connection as DatabaseConnection;
+use Drupal\Component\Utility\Unicode;
 
 /**
  * @addtogroup database
@@ -28,11 +29,26 @@ class Connection extends DatabaseConnection {
   const DATABASE_NOT_FOUND = 1049;
 
   /**
+   * Error code for "Can't initialize character set" error.
+   */
+  const UNSUPPORTED_CHARSET = 2019;
+
+  /**
    * Flag to indicate if the cleanup function in __destruct() should run.
    *
    * @var bool
    */
   protected $needsCleanup = FALSE;
+
+  /**
+   * The minimal possible value for the max_allowed_packet setting of MySQL.
+   *
+   * @link https://mariadb.com/kb/en/mariadb/server-system-variables/#max_allowed_packet
+   * @link https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_max_allowed_packet
+   *
+   * @var int
+   */
+  const MIN_MAX_ALLOWED_PACKET = 1024;
 
   /**
    * Constructs a Connection object.
@@ -52,7 +68,32 @@ class Connection extends DatabaseConnection {
   /**
    * {@inheritdoc}
    */
+  public function query($query, array $args = array(), $options = array()) {
+    try {
+      return parent::query($query, $args, $options);
+    } catch (DatabaseException $e) {
+      if ($e->getPrevious()->errorInfo[1] == 1153) {
+        // If a max_allowed_packet error occurs the message length is truncated.
+        // This should prevent the error from recurring if the exception is
+        // logged to the database using dblog or the like.
+        $message = Unicode::truncateBytes($e->getMessage(), self::MIN_MAX_ALLOWED_PACKET);
+        $e = new DatabaseExceptionWrapper($message, $e->getCode(), $e->getPrevious());
+      }
+      throw $e;
+    }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public static function open(array &$connection_options = array()) {
+    if (isset($connection_options['_dsn_utf8_fallback']) && $connection_options['_dsn_utf8_fallback'] === TRUE) {
+      // Only used during the installer version check, as a fallback from utf8mb4.
+      $charset = 'utf8';
+    }
+    else {
+      $charset = 'utf8mb4';
+    }
     // The DSN should use either a socket or a host/port.
     if (isset($connection_options['unix_socket'])) {
       $dsn = 'mysql:unix_socket=' . $connection_options['unix_socket'];
@@ -64,7 +105,7 @@ class Connection extends DatabaseConnection {
     // Character set is added to dsn to ensure PDO uses the proper character
     // set when escaping. This has security implications. See
     // https://www.drupal.org/node/1201452 for further discussion.
-    $dsn .= ';charset=utf8mb4';
+    $dsn .= ';charset=' . $charset;
     if (!empty($connection_options['database'])) {
       $dsn .= ';dbname=' . $connection_options['database'];
     }
@@ -95,10 +136,10 @@ class Connection extends DatabaseConnection {
     // certain one has been set; otherwise, MySQL defaults to
     // 'utf8mb4_general_ci' for utf8mb4.
     if (!empty($connection_options['collation'])) {
-      $pdo->exec('SET NAMES utf8mb4 COLLATE ' . $connection_options['collation']);
+      $pdo->exec('SET NAMES ' . $charset . ' COLLATE ' . $connection_options['collation']);
     }
     else {
-      $pdo->exec('SET NAMES utf8mb4');
+      $pdo->exec('SET NAMES ' . $charset);
     }
 
     // Set MySQL init_commands if not already defined.  Default Drupal's MySQL
@@ -278,6 +319,7 @@ class Connection extends DatabaseConnection {
       }
     }
   }
+
 }
 
 

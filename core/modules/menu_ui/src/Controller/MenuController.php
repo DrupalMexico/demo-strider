@@ -73,11 +73,11 @@ class MenuController extends ControllerBase {
    * @param \Drupal\system\MenuInterface $menu
    *   The menu entity.
    *
-   * @return string
-   *   The menu label.
+   * @return array
+   *   The menu label as a render array.
    */
   public function menuTitle(MenuInterface $menu) {
-    return Xss::filter($menu->label());
+    return ['#markup' => $menu->label(), '#allowed_tags' => Xss::getHtmlTagList()];
   }
 
 }

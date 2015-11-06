@@ -7,7 +7,8 @@
 
 namespace Drupal\Core;
 
-use Drupal\Core\Cache\CacheableMetadata;
+use Drupal\Component\Render\MarkupInterface;
+use Drupal\Core\Render\BubbleableMetadata;
 
 /**
  * Used to return generated links, along with associated cacheability metadata.
@@ -15,7 +16,7 @@ use Drupal\Core\Cache\CacheableMetadata;
  * Note: not to be confused with \Drupal\Core\Link, which is for passing around
  *   ungenerated links (typically link text + route name + route parameters).
  */
-class GeneratedLink extends CacheableMetadata {
+class GeneratedLink extends BubbleableMetadata implements MarkupInterface {
 
   /**
    * The HTML string value containing a link.
@@ -44,6 +45,20 @@ class GeneratedLink extends CacheableMetadata {
   public function setGeneratedLink($generated_link) {
     $this->generatedLink = $generated_link;
     return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function __toString() {
+    return (string) $this->generatedLink;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function jsonSerialize() {
+    return $this->__toString();
   }
 
 }

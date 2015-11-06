@@ -39,6 +39,16 @@ class ContentTranslationWorkflowsTest extends ContentTranslationTestBase {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  protected function getTranslatorPermissions() {
+    $permissions = parent::getTranslatorPermissions();
+    $permissions[] = 'view test entity';
+
+    return $permissions;
+  }
+
+  /**
    * Overrides \Drupal\content_translation\Tests\ContentTranslationTestBase::getEditorPermissions().
    */
   protected function getEditorPermissions() {
@@ -109,9 +119,16 @@ class ContentTranslationWorkflowsTest extends ContentTranslationTestBase {
     $ops = array('create' => t('Add'), 'update' => t('Edit'), 'delete' => t('Delete'));
     $translations_url = $this->entity->urlInfo('drupal:content-translation-overview');
     foreach ($ops as $current_op => $item) {
-      $user = $this->drupalCreateUser(array($this->getTranslatePermission(), "$current_op content translations"));
+      $user = $this->drupalCreateUser(array($this->getTranslatePermission(), "$current_op content translations", 'view test entity'));
       $this->drupalLogin($user);
       $this->drupalGet($translations_url);
+
+      // Make sure that the user.permissions cache context and the cache tags
+      // for the entity are present.
+      $this->assertCacheContext('user.permissions');
+      foreach ($this->entity->getCacheTags() as $cache_tag) {
+        $this->assertCacheTag($cache_tag);
+      }
 
       foreach ($ops as $op => $label) {
         if ($op != $current_op) {

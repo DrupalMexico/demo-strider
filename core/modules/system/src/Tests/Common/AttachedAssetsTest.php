@@ -9,7 +9,6 @@ namespace Drupal\system\Tests\Common;
 
 use Drupal\Component\Serialization\Json;
 use Drupal\Component\Utility\Unicode;
-use Drupal\Component\Utility\Crypt;
 use Drupal\Core\Asset\AttachedAssets;
 use Drupal\simpletest\KernelTestBase;
 
@@ -185,9 +184,9 @@ class AttachedAssetsTest extends KernelTestBase {
     $rendered_footer_js = \Drupal::service('asset.js.collection_renderer')->render($footer_js);
     $this->assertTrue(
       count($rendered_footer_js) == 2
-      && substr($rendered_footer_js[0]['#value'], 0, 20) === 'var drupalSettings ='
+      && $rendered_footer_js[0]['#attributes']['data-drupal-selector'] === 'drupal-settings-json'
       && substr($rendered_footer_js[1]['#attributes']['src'], 0, 7) === 'http://',
-      'There are 2 JavaScript assets in the footer: one with drupalSettings, one with the sole aggregated JavaScript asset.'
+      'There are 2 JavaScript assets in the footer: one with drupal settings, one with the sole aggregated JavaScript asset.'
     );
   }
 
@@ -206,16 +205,15 @@ class AttachedAssetsTest extends KernelTestBase {
     $rendered_js = $this->renderer->renderPlain($js_render_array);
 
     // Parse the generated drupalSettings <script> back to a PHP representation.
-    $startToken = 'drupalSettings = ';
+    $startToken = '{';
     $endToken = '}';
-    $start = strpos($rendered_js, $startToken) + strlen($startToken);
+    $start = strpos($rendered_js, $startToken);
     $end = strrpos($rendered_js, $endToken);
     $json  = Unicode::substr($rendered_js, $start, $end - $start + 1);
     $parsed_settings = Json::decode($json);
 
     // Test whether the settings for core/drupalSettings are available.
     $this->assertTrue(isset($parsed_settings['path']['baseUrl']), 'drupalSettings.path.baseUrl is present.');
-    $this->assertTrue(isset($parsed_settings['path']['scriptPath']), 'drupalSettings.path.scriptPath is present.');
     $this->assertIdentical($parsed_settings['path']['pathPrefix'], 'yarhar', 'drupalSettings.path.pathPrefix is present and has the correct (overridden) value.');
     $this->assertIdentical($parsed_settings['path']['currentPath'], '', 'drupalSettings.path.currentPath is present and has the correct value.');
     $this->assertIdentical($parsed_settings['path']['currentPathIsAdmin'], FALSE, 'drupalSettings.path.currentPathIsAdmin is present and has the correct value.');
@@ -287,8 +285,9 @@ class AttachedAssetsTest extends KernelTestBase {
 
     $js = $this->assetResolver->getJsAssets($assets, FALSE)[1];
     $js_render_array = \Drupal::service('asset.js.collection_renderer')->render($js);
+
     $rendered_js = $this->renderer->renderPlain($js_render_array);
-    $this->assertTrue(strpos($rendered_js, 'core/assets/vendor/backbone/backbone-min.js?v=1.1.2') > 0 && strpos($rendered_js, 'core/assets/vendor/domready/ready.min.js?v=1.0.8') > 0 , 'JavaScript version identifiers correctly appended to URLs');
+    $this->assertTrue(strpos($rendered_js, 'core/assets/vendor/backbone/backbone-min.js?v=1.2.3') > 0 && strpos($rendered_js, 'core/assets/vendor/domready/ready.min.js?v=1.0.8') > 0 , 'JavaScript version identifiers correctly appended to URLs');
   }
 
   /**

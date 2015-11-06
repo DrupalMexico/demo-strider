@@ -7,17 +7,19 @@
 
 namespace Drupal\aggregator\Tests\Views;
 
+use Drupal\Component\Utility\Xss;
+use Drupal\Core\Render\RenderContext;
 use Drupal\Core\Url;
 use Drupal\views\Views;
 use Drupal\views\Tests\ViewTestData;
-use Drupal\views\Tests\ViewUnitTestBase;
+use Drupal\views\Tests\ViewKernelTestBase;
 
 /**
  * Tests basic integration of views data from the aggregator module.
  *
  * @group aggregator
  */
-class IntegrationTest extends ViewUnitTestBase {
+class IntegrationTest extends ViewKernelTestBase {
 
   /**
    * Modules to install.
@@ -66,6 +68,9 @@ class IntegrationTest extends ViewUnitTestBase {
    * Tests basic aggregator_item view.
    */
   public function testAggregatorItemView() {
+    /** @var \Drupal\Core\Render\RendererInterface $renderer */
+    $renderer = \Drupal::service('renderer');
+
     $feed = $this->feedStorage->create(array(
       'title' => $this->randomMachineName(),
       'url' => 'https://www.drupal.org/',
@@ -112,13 +117,22 @@ class IntegrationTest extends ViewUnitTestBase {
     foreach ($view->result as $row) {
       $iid = $view->field['iid']->getValue($row);
       $expected_link = \Drupal::l($items[$iid]->getTitle(), Url::fromUri($items[$iid]->getLink(), ['absolute' => TRUE]));
-      $this->assertEqual($view->field['title']->advancedRender($row), $expected_link, 'Ensure the right link is generated');
+      $output = $renderer->executeInRenderContext(new RenderContext(), function () use ($view, $row) {
+        return $view->field['title']->advancedRender($row);
+      });
+      $this->assertEqual($output, $expected_link, 'Ensure the right link is generated');
 
-      $expected_author = aggregator_filter_xss($items[$iid]->getAuthor());
-      $this->assertEqual($view->field['author']->advancedRender($row), $expected_author, 'Ensure the author got filtered');
+      $expected_author = Xss::filter($items[$iid]->getAuthor(), _aggregator_allowed_tags());
+      $output = $renderer->executeInRenderContext(new RenderContext(), function () use ($view, $row) {
+        return $view->field['author']->advancedRender($row);
+      });
+      $this->assertEqual($output, $expected_author, 'Ensure the author got filtered');
 
-      $expected_description = aggregator_filter_xss($items[$iid]->getDescription());
-      $this->assertEqual($view->field['description']->advancedRender($row), $expected_description, 'Ensure the author got filtered');
+      $expected_description = Xss::filter($items[$iid]->getDescription(), _aggregator_allowed_tags());
+      $output = $renderer->executeInRenderContext(new RenderContext(), function () use ($view, $row) {
+        return $view->field['description']->advancedRender($row);
+      });
+      $this->assertEqual($output, $expected_description, 'Ensure the author got filtered');
     }
   }
 

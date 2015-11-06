@@ -8,10 +8,10 @@
 namespace Drupal\migrate_drupal\Plugin\migrate\source;
 
 use Drupal\Component\Plugin\DependentPluginInterface;
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Entity\DependencyTrait;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\Core\State\StateInterface;
 use Drupal\migrate\Entity\MigrationInterface;
 use Drupal\migrate\Exception\RequirementsException;
 use Drupal\migrate\Plugin\migrate\source\SqlBase;
@@ -52,8 +52,8 @@ abstract class DrupalSqlBase extends SqlBase implements ContainerFactoryPluginIn
   /**
    * {@inheritdoc}
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, MigrationInterface $migration, EntityManagerInterface $entity_manager) {
-    parent::__construct($configuration, $plugin_id, $plugin_definition, $migration);
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, MigrationInterface $migration, StateInterface $state, EntityManagerInterface $entity_manager) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $migration, $state);
     $this->entityManager = $entity_manager;
   }
 
@@ -90,6 +90,7 @@ abstract class DrupalSqlBase extends SqlBase implements ContainerFactoryPluginIn
       $plugin_id,
       $plugin_definition,
       $migration,
+      $container->get('state'),
       $container->get('entity.manager')
     );
   }
@@ -102,11 +103,11 @@ abstract class DrupalSqlBase extends SqlBase implements ContainerFactoryPluginIn
       if (isset($this->pluginDefinition['source_provider'])) {
         if ($this->moduleExists($this->pluginDefinition['source_provider'])) {
           if (isset($this->pluginDefinition['minimum_schema_version']) && !$this->getModuleSchemaVersion($this->pluginDefinition['source_provider']) < $this->pluginDefinition['minimum_schema_version']) {
-            throw new RequirementsException(SafeMarkup::format('Required minimum schema version @minimum_schema_version', ['@minimum_schema_version' => $this->pluginDefinition['minimum_schema_version']]), ['minimum_schema_version' => $this->pluginDefinition['minimum_schema_version']]);
+            throw new RequirementsException('Required minimum schema version ' . $this->pluginDefinition['minimum_schema_version'], ['minimum_schema_version' => $this->pluginDefinition['minimum_schema_version']]);
           }
         }
         else {
-          throw new RequirementsException(SafeMarkup::format('Missing source provider @provider', ['@provider' => $this->pluginDefinition['source_provider']]), ['source_provider' => $this->pluginDefinition['source_provider']]);
+          throw new RequirementsException('Missing source provider ' . $this->pluginDefinition['source_provider'], ['source_provider' => $this->pluginDefinition['source_provider']]);
         }
       }
     }

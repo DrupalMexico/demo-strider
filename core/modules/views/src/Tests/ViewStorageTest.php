@@ -8,11 +8,8 @@
 namespace Drupal\views\Tests;
 
 use Drupal\Core\Entity\EntityTypeInterface;
-use Drupal\Core\Config\Entity\ConfigEntityStorage;
 use Drupal\views\Entity\View;
 use Drupal\views\Plugin\views\display\Page;
-use Drupal\views\Plugin\views\display\DefaultDisplay;
-use Drupal\views\Plugin\views\display\Feed;
 use Drupal\views\Views;
 
 /**
@@ -22,7 +19,7 @@ use Drupal\views\Views;
  * @see \Drupal\views\Entity\View
  * @see \Drupal\Core\Config\Entity\ConfigEntityStorage
  */
-class ViewStorageTest extends ViewUnitTestBase {
+class ViewStorageTest extends ViewKernelTestBase {
 
   /**
    * Properties that should be stored in the configuration.
@@ -185,7 +182,8 @@ class ViewStorageTest extends ViewUnitTestBase {
    * Tests the display related functions like getDisplaysList().
    */
   protected function displayMethodTests() {
-    // Enable the system module so _l() can work using url_alias table.
+    // Enable the system module so the link generator can work using url_alias
+    // table.
     $this->installSchema('system', 'url_alias');
 
     $config['display'] = array(

@@ -85,6 +85,7 @@ class EngineTwigTest extends WebTestBase {
       'link via the linkgenerator: ' . $link_generator->generate('register', new Url('user.register', [], ['absolute' => TRUE, 'attributes' => ['foo' => 'bar']])),
       'link via the linkgenerator: ' . $link_generator->generate('register', new Url('user.register', [], ['attributes' => ['foo' => 'bar', 'id' => 'kitten']])),
       'link via the linkgenerator: ' . $link_generator->generate('register', new Url('user.register', [], ['attributes' => ['id' => 'kitten']])),
+      'link via the linkgenerator: ' . $link_generator->generate('register', new Url('user.register', [], ['attributes' => ['class' => ['llama', 'kitten', 'panda']]])),
     ];
 
     // Verify that link() has the ability to bubble cacheability metadata:
@@ -134,6 +135,14 @@ class EngineTwigTest extends WebTestBase {
   public function testTwigAttachLibrary() {
     $this->drupalGet('/twig-theme-test/attach-library');
     $this->assertRaw('ckeditor.js');
+  }
+
+  /**
+   * Tests the rendering of renderables.
+   */
+  public function testRenderable() {
+    $this->drupalGet('/twig-theme-test/renderable');
+    $this->assertRaw('<div>Example markup</div>');
   }
 
 }
